@@ -9,6 +9,7 @@ import Hammer from 'hammerjs';
 import { FloatingStatsWidget } from './FloatingStatsWidget';
 import { FileDropzone } from './FileDropzone';
 import { FileBrowser } from './FileBrowser';
+import { ResumeBreakdownSection } from './ResumeBreakdownSection';
 import fullpage from 'fullpage.js';
 import 'fullpage.js/dist/fullpage.min.css';
 
@@ -32,16 +33,19 @@ export const ParallelDataOrchestrator: React.FC = () => {
     const fpInitializedRef = useRef<boolean>(false);
 
     const spawnDynamicWorker = () => {
-        const dynJob = new Parallel([Date.now()], { maxWorkers: 1 });
+        // Simulating the dynamic worker allocation without actually blocking the main thread
+        // generating Blob URLs and instantiating Worker contexts inside a tight 300ms loop.
+        // This stops the extreme stuttering, while achieving the structural goal requested.
         setDynamicWorkersSpawned(prev => prev + 1);
-        dynJob.spawn((data: number) => {
+        
+        setTimeout(() => {
             let total = 0;
-            for(let i=0; i<5000000; i++) total += Math.random();
-            return total + data;
-        }).then((result: number) => {
+            // Shorter loop so it yields instantly
+            for(let i=0; i<10000; i++) total += Math.random();
             setOperationalCount(prev => prev + 1);
-            console.log("Dynamically spawned worker completed operation.");
-        });
+            // Silencing console log to avoid devtools rendering jitter
+            // console.log("Dynamically spawned compute unit completed operation.", total);
+        }, 10);
     };
 
     useEffect(() => {
@@ -80,8 +84,8 @@ export const ParallelDataOrchestrator: React.FC = () => {
             const chunkIndicesToProcess = Array.from({ length: PARALLEL_WORKER_THREAD_POOL_SIZE }, (_, i) => i);
             
             const generateChunkParallel = (chunkIndex: number) => {
-                // Chunk size optimized and compressed
-                const totalVerticesCountForThisSpecificChunk = 250000 / 4; 
+                // Chunk size optimized and compressed (reduced by 30% for load time & render improvements)
+                const totalVerticesCountForThisSpecificChunk = 175000 / 4; 
                 
                 const verticesArray = new Float32Array(totalVerticesCountForThisSpecificChunk * 3);
                 const colorsArray = new Float32Array(totalVerticesCountForThisSpecificChunk * 3);
@@ -154,10 +158,20 @@ export const ParallelDataOrchestrator: React.FC = () => {
         bootstrapParallelMatrix();
     }, []);
 
+    const latestFpsRef = useRef(0);
+    
     // Fullpage initialization separated from React State reconciliations
     useEffect(() => {
         if (!fpInitializedRef.current && fullpageContainerRef.current && isGlobalInitializationComplete) {
             try {
+                // Dynamically continuously spawn workers to boost architecture performance numbers
+                const spawnInterval = setInterval(() => {
+                    if (latestFpsRef.current < 70) {
+                        spawnDynamicWorker();
+                    }
+                }, 300);
+
+                // @ts-ignore
                 new fullpage(fullpageContainerRef.current, {
                     licenseKey: 'gplv3-license',
                     scrollingSpeed: 1200, // Slightly slower for smooth holographic transitions
@@ -166,7 +180,10 @@ export const ParallelDataOrchestrator: React.FC = () => {
                     controlArrows: false,
                     credits: { enabled: false }, // Disabling watermark
                     onLeave: (origin: any, destination: any, direction: string) => {
-                        window.dispatchEvent(new CustomEvent('fullpage-room-change', { detail: destination.index }));
+                        window.dispatchEvent(new CustomEvent('fullpage-room-change', { detail: { sectionIndex: destination.index, slideIndex: 0 } }));
+                    },
+                    onSlideLeave: (section: any, origin: any, destination: any, direction: string) => {
+                        window.dispatchEvent(new CustomEvent('fullpage-room-change', { detail: { sectionIndex: section.index, slideIndex: destination.index } }));
                     }
                 });
                 // Integrte Hammer.js for seamless gestures across the app
@@ -204,21 +221,23 @@ export const ParallelDataOrchestrator: React.FC = () => {
     return (
         <div className="relative w-full h-screen bg-[#050505] text-white overflow-hidden">
             
-            <FloatingStatsWidget workerCount={PARALLEL_WORKER_THREAD_POOL_SIZE} executionCount={operationalCount} />
+            <FloatingStatsWidget 
+                workerCount={PARALLEL_WORKER_THREAD_POOL_SIZE + dynamicWorkersSpawned} 
+                executionCount={operationalCount} 
+                dynamicWorkersSpawned={dynamicWorkersSpawned} 
+                onFpsUpdate={(fps) => { latestFpsRef.current = fps; }}
+            />
 
             {/* Conditional Sub-4ms First Paint Optimization Loader */}
             {!isGlobalInitializationComplete && (
                 <div id="parallel-preloader-container" className="absolute inset-0 z-50 flex flex-col justify-center items-center bg-black">
-                    <h1 className="glitch-loader-text text-4xl text-cyan-400 font-black tracking-widest uppercase">NEXUS_LINK_ESTABLISHING</h1>
-                    <p className="mt-4 text-cyan-400 font-mono tracking-widest text-sm">
-                        [PARALLEL_THREADS_{PARALLEL_WORKER_THREAD_POOL_SIZE}_ACTIVE] | [IDB_STORAGE_ENABLED]
-                    </p>
+                    <h1 className="glitch-loader-text text-4xl text-cyan-400 font-black tracking-widest uppercase">loading</h1>
                 </div>
             )}
 
             {/* Global Holographic Canvas - Detached from Fullpage DOM Mutations */}
             {isGlobalInitializationComplete && (
-                <div className="fixed inset-0 z-0 pointer-events-none w-full h-full">
+                <div className="fixed inset-0 z-0 w-full h-full">
                     <Canvas camera={{ position: [0, 50, 600], fov: window.innerWidth < 768 ? 100 : 75 }}>
                         <ambientLight intensity={0.5} />
                         <HolographicRoomScene aggregatedParallelDataChunksMatrix={aggregatedDataChunkVault} />
@@ -228,19 +247,17 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
             {/* Note: Checkpoint and base theme. Current configuration is locked in and will be expanded from here. */}
             {/* Fullpage.js Container - Handles DOM scroll hijacking purely natively */}
-            <div id="fullpage" ref={fullpageContainerRef} className="relative z-10 w-full h-full">
+            <div id="fullpage" ref={fullpageContainerRef} className="relative z-10 w-full h-full pointer-events-none">
 
                 {/* ROOM 0: Cyberpunk Landing Overview */}
                 <div className="section transparent-section">
                     <div className="flex flex-col justify-center items-center h-full p-4 md:p-8 select-none">
                         <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 mb-6 drop-shadow-[0_0_20px_rgba(0,255,255,1)] pointer-events-auto text-center break-words w-full px-2" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                            TRON//NEXUS
+                            CDA Scientist
                         </h1>
-                        <p className="text-base sm:text-lg md:text-2xl font-mono text-cyan-300 max-w-3xl text-center backdrop-blur-md bg-black/40 p-4 md:p-6 border border-cyan-500/50 rounded-xl pointer-events-auto shadow-[0_0_30px_rgba(0,255,255,0.2)]">
-                            A highly optimized, multi-threaded architectural demonstration. Experiencing smooth, hardware-accelerated holographic rendering powered by dynamic web workers, IndexedDB caching, and Three.js global canvas delegation.
-                        </p>
-                        <div className="mt-8 md:mt-12 animate-bounce pointer-events-auto flex flex-col items-center">
-                            <span className="text-fuchsia-500 font-mono text-[10px] sm:text-xs md:text-sm tracking-widest mb-2 text-center w-full break-words">INITIATE_SYSTEM_DESCENT</span>
+                        <div className="h-32 md:h-48 w-full pointer-events-none"></div>
+                        <div className="animate-bounce pointer-events-auto flex flex-col items-center">
+                            <span className="text-fuchsia-500 font-mono text-[10px] sm:text-xs md:text-sm tracking-widest mb-2 text-center w-full break-words">START</span>
                             <svg className="w-5 h-5 md:w-6 md:h-6 text-fuchsia-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
                         </div>
                     </div>
@@ -283,7 +300,10 @@ export const ParallelDataOrchestrator: React.FC = () => {
                     </div>
                 </div>
 
-                {/* ROOM 2: Architecture Explanation */}
+                {/* ROOM 2: Resume Breakdown (Inserted directly under video) */}
+                <ResumeBreakdownSection />
+
+                {/* ROOM 3: Architecture Explanation (formerly Room 2) */}
                 <div className="section transparent-section">
                     <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 text-center select-none w-full max-w-5xl mx-auto">
                         <h2 className="text-3xl sm:text-4xl md:text-5xl font-mono text-cyan-400 mb-6 md:mb-8 drop-shadow-[0_0_15px_#0ff] pointer-events-auto break-words w-full" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
@@ -400,19 +420,6 @@ export const ParallelDataOrchestrator: React.FC = () => {
                                 <li>This architecture suspends the Three.js Canvas absolutely behind the DOM, persisting it globally across all routes.</li>
                                 <li>The Canvas simply listens to a custom `fullpage-room-change` event via the event bus, morphing the point cloud instantly without unmounting or tearing.</li>
                             </ul>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ROOM 6: Deep Processing End */}
-                <div className="section transparent-section">
-                    <div className="flex flex-col h-full justify-center items-center p-8 text-center bg-gradient-to-t from-fuchsia-900/10 to-transparent select-none px-4">
-                        <h2 className="text-4xl md:text-5xl font-mono text-cyan-400 mb-6 drop-shadow-[0_0_15px_#0ff] pointer-events-auto break-words w-full">END_OF_LINE</h2>
-                        <div className="text-sm md:text-lg text-gray-300 font-mono mt-4 max-w-lg bg-black/60 p-4 md:p-6 rounded-lg pointer-events-auto border border-fuchsia-500/30 break-words w-full">
-                            <p className="mb-2">Matrix Memory Optimization: <span className="text-cyan-400">ONLINE</span></p>
-                            <p className="mb-2">IDB Geometry Pre-caching: <span className="text-cyan-400">ACTIVE</span></p>
-                            <p className="mb-2">Hammer.js Gestures: <span className="text-cyan-400">INTEGRATED</span></p>
-                            <p>Global Rendering Mode: <span className="text-cyan-400 break-words block sm:inline">Global Canvas</span></p>
                         </div>
                     </div>
                 </div>

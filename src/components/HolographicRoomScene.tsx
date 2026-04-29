@@ -3,6 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { AutomatedMemoryCleaner } from '../lib/AutomatedMemoryCleaner';
 
+import { SocialIcons3D } from './SocialIcons3D';
+
 interface HolographicRoomSceneProperties {
     aggregatedParallelDataChunksMatrix: any[];
 }
@@ -38,16 +40,35 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
         handleResize(); // trigger immediately
 
         const onRoomChange = (e: any) => {
-            const destIndex = e.detail;
+            const destIndex = e.detail?.sectionIndex ?? e.detail;
+            const slideIndex = e.detail?.slideIndex ?? 0;
+
             if (destIndex === 0) {
                 targetPos.current.set(0, 50, 600);
                 targetLookAt.current.set(0, 50, 0);
             } else if (destIndex === 1) {
-                targetPos.current.set(0, 50, 200);   // Move inside video cluster
-                targetLookAt.current.set(0, 50, -500); 
+                // Video page - move depending on slide
+                targetPos.current.set(slideIndex * 200, 50, 200);   
+                targetLookAt.current.set(slideIndex * 200, 50, -500); 
             } else if (destIndex === 2) {
+                // Resume Breakdown Matrix - has 9 slides (index 0 to 8)
+                targetPos.current.set(300 + (slideIndex * 350), -100 - (slideIndex * 100), -300 - (slideIndex * 250)); 
+                targetLookAt.current.set(0, (slideIndex * -80), 0);
+            } else if (destIndex === 3) {
                 targetPos.current.set(-500, 200, -100); // Deep core room
                 targetLookAt.current.set(-500, 200, -200);
+            } else if (destIndex === 4) {
+                targetPos.current.set(500, 150, -100); // Dynamic Thread Allocator Node
+                targetLookAt.current.set(500, 100, -500);
+            } else if (destIndex === 5) {
+                targetPos.current.set(0, -100, 0); // Matrix Nexus (Underworld)
+                targetLookAt.current.set(0, -100, -500);
+            } else if (destIndex === 6) {
+                targetPos.current.set(200, 300, 400); // Overview Deck
+                targetLookAt.current.set(0, 0, 0);
+            } else if (destIndex >= 7) {
+                targetPos.current.set(0, 0, 800); // Data Ingestion Hub
+                targetLookAt.current.set(0, 0, 0);
             }
         };
 
@@ -59,14 +80,19 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
     }, [camera]);
 
     useFrame((state, delta) => {
-        // High-performance smooth transitions between rooms
-        camera.position.lerp(targetPos.current, Math.min(delta * 4, 1));
-        currentLookAt.current.lerp(targetLookAt.current, Math.min(delta * 4, 1));
+        // Prevent huge delta spikes on tab switch or heavy load
+        const dt = Math.min(delta, 0.1);
+        
+        // High-performance smooth transitions between rooms using improved lerp based on damped exponential
+        // Lerping purely with a constant multiplier * delta can be jittery, we'll use a better smoothing function based on 1 - exp(-speed * dt)
+        const lerpFactor = 1 - Math.exp(-4 * dt);
+        camera.position.lerp(targetPos.current, lerpFactor);
+        currentLookAt.current.lerp(targetLookAt.current, lerpFactor);
         camera.lookAt(currentLookAt.current);
 
         if (pointCloudRef.current) {
-            // Subtle ambient holographic fluctuation
-            pointCloudRef.current.rotation.y += delta * 0.02;
+            // Subtle ambient holographic fluctuation using proper time delta
+            pointCloudRef.current.rotation.y += dt * 0.05;
             const mat = pointCloudRef.current.material as THREE.PointsMaterial;
             mat.opacity = 0.7 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
         }
@@ -90,31 +116,38 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
     }
 
     return (
-        <points ref={pointCloudRef}>
-            <bufferGeometry>
-                <bufferAttribute
-                    attach="attributes-position"
-                    count={massiveConcatenatedVerticesCount / 3}
-                    array={monolithicVertexFloatBuffer}
-                    itemSize={3}
+        <group>
+            <ambientLight intensity={1.5} />
+            <directionalLight position={[10, 20, 10]} intensity={2} />
+            <points ref={pointCloudRef}>
+                <bufferGeometry>
+                    <bufferAttribute
+                        attach="attributes-position"
+                        count={massiveConcatenatedVerticesCount / 3}
+                        array={monolithicVertexFloatBuffer}
+                        itemSize={3}
+                    />
+                    <bufferAttribute
+                        attach="attributes-color"
+                        count={massiveConcatenatedVerticesCount / 3}
+                        array={monolithicColorFloatBuffer}
+                        itemSize={3}
+                    />
+                </bufferGeometry>
+                {/* Tron-style AdditiveBlending Material optimized for 70 fps */}
+                <pointsMaterial
+                    size={0.15}
+                    vertexColors={true}
+                    transparent={true}
+                    opacity={0.9}
+                    blending={THREE.AdditiveBlending}
+                    depthWrite={false}
+                    sizeAttenuation={true}
                 />
-                <bufferAttribute
-                    attach="attributes-color"
-                    count={massiveConcatenatedVerticesCount / 3}
-                    array={monolithicColorFloatBuffer}
-                    itemSize={3}
-                />
-            </bufferGeometry>
-            {/* Tron-style AdditiveBlending Material optimized for 70 fps */}
-            <pointsMaterial
-                size={0.15}
-                vertexColors={true}
-                transparent={true}
-                opacity={0.9}
-                blending={THREE.AdditiveBlending}
-                depthWrite={false}
-                sizeAttenuation={true}
-            />
-        </points>
+            </points>
+            <group visible={targetPos.current.z === 600}>
+                <SocialIcons3D />
+            </group>
+        </group>
     );
 };

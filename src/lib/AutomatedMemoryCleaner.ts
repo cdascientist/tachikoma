@@ -38,34 +38,24 @@ export class AutomatedMemoryCleaner {
               try { (window as any).gc(); } catch (e) {}
           }
 
-          // Offload aggressive cache clearing and simulated deep memory defrag to the worker
-          const memorySweep = () => {
-              let freed = 0;
-              // Clear caches aggressively in the background thread
-              if (typeof caches !== 'undefined') {
-                caches.keys().then(names => {
-                    for (let name of names) caches.delete(name);
-                });
-              }
-              // Simulated intense memory operations to ensure it doesn't block main thread
-              // We manipulate large TypedArrays locally here to force background GC pressure
+          // Offload aggressive cache clearing asynchronously (does not block main thread)
+          if (typeof caches !== 'undefined') {
+              caches.keys().then(names => {
+                  names.forEach(name => {
+                      caches.delete(name).catch(() => {}); // catch to avoid unhandled promise rejections
+                  });
+              }).catch(() => {});
+          }
+
+          // Simulated intense memory operations to ensure it doesn't block main thread
+          // Moved to a macro-task to yield to the renderer
+          setTimeout(() => {
               let arr = new Float64Array(50000);
               for(let i = 0; i < arr.length; i++) {
-                arr[i] = Math.random();
+                 arr[i] = Math.random();
               }
               arr = new Float64Array(0); // GC hint
-              freed = 1;
-              return freed;
-          };
-
-          if (this.cleanerJob) {
-              this.cleanerJob.spawn(memorySweep).then((result: any) => {
-                  if (result === 1) {
-                      // Silently succeeded background memory operation, keeping UI/FPS pristine
-                      // console.log('[AutomatedMemoryCleaner] Aggressive background sweep executed.');
-                  }
-              });
-          }
+          }, 0);
 
       }, 2500); // More aggressive: every 2.5s instead of 5s
   }
