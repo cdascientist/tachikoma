@@ -9,6 +9,8 @@ import Hammer from 'hammerjs';
 import { FloatingStatsWidget } from './FloatingStatsWidget';
 import { FileDropzone } from './FileDropzone';
 import { FileBrowser } from './FileBrowser';
+import fullpage from 'fullpage.js';
+import 'fullpage.js/dist/fullpage.min.css';
 
 export interface GeometryChunkDataPayload {
     chunkIndexIdentifier: number;
@@ -154,9 +156,9 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
     // Fullpage initialization separated from React State reconciliations
     useEffect(() => {
-        if (!fpInitializedRef.current && fullpageContainerRef.current && (window as any).fullpage && isGlobalInitializationComplete) {
+        if (!fpInitializedRef.current && fullpageContainerRef.current && isGlobalInitializationComplete) {
             try {
-                new (window as any).fullpage(fullpageContainerRef.current, {
+                new fullpage(fullpageContainerRef.current, {
                     licenseKey: 'gplv3-license',
                     scrollingSpeed: 1200, // Slightly slower for smooth holographic transitions
                     navigation: true,
@@ -416,7 +418,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
                 </div>
 
                 {/* ROOM 7: Payload Integration */}
-                <div className="section transparent-section overflow-y-auto">
+                <div className="section transparent-section fp-auto-height">
                     <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 select-none py-20 min-h-screen">
                         <h2 className="text-3xl sm:text-4xl md:text-5xl font-mono text-cyan-400 mb-6 drop-shadow-[0_0_15px_#0ff] pointer-events-auto break-words w-full text-center shrink-0">DATA_INGESTION_HUB</h2>
                         <div className="w-full max-w-4xl mx-auto flex flex-col gap-8 justify-center pb-20">

@@ -1,4 +1,4 @@
-(function() {
+const ParallelOut = (function() {
   const isCommonJS = typeof module !== 'undefined' && module.exports;
   const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
   var setImmediate =
@@ -442,4 +442,4 @@
 
 })();
 
-export default window.Parallel || Parallel;
+export default typeof window !== 'undefined' && window.Parallel ? window.Parallel : ParallelOut;

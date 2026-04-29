@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -8,7 +7,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const vaultDir = path.join(__dirname, "src", "SECURE_VAULT");
+const vaultDir = path.join(__dirname, "src");
 
 // Ensure the directory exists
 if (!fs.existsSync(vaultDir)) {
@@ -34,7 +33,7 @@ const upload = multer({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // JSON parser for explicit API requests
   app.use(express.json());
@@ -97,6 +96,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

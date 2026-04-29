@@ -11,8 +11,8 @@ const defaultTree: Tree = [
     {
         id: 'system_root',
         type: 'Folder',
-        name: 'src/SECURE_VAULT',
-        filePath: '/src/SECURE_VAULT',
+        name: 'src',
+        filePath: '/src',
         expanded: true,
         icon: 'folderExpanded',
         children: []
@@ -44,7 +44,7 @@ export const FileExplorerProvider = ({ children }: { children: ReactNode }) => {
                         return {
                             id: file.name, // use filename as ID for easier manipulation
                             type: 'File',
-                            filePath: `/src/SECURE_VAULT/${file.name}`,
+                            filePath: `/src/${file.name}`,
                             extension: extension,
                             icon: extension,
                             name: file.name,
