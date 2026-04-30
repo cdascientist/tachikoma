@@ -192,6 +192,9 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
   // Fullpage initialization separated from React State reconciliations
   useEffect(() => {
+    let hammerManager: HammerManager | null = null;
+    let spawnInterval: any = null;
+
     if (
       !fpInitializedRef.current &&
       fullpageContainerRef.current &&
@@ -199,7 +202,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
     ) {
       try {
         // Dynamically continuously spawn workers to boost architecture performance numbers
-        const spawnInterval = setInterval(() => {
+        spawnInterval = setInterval(() => {
           if (latestFpsRef.current < 70) {
             spawnDynamicWorker();
           }
@@ -236,15 +239,23 @@ export const ParallelDataOrchestrator: React.FC = () => {
             );
           },
         });
-        // Integrte Hammer.js for seamless gestures across the app
-        const hammerManager = new Hammer(fullpageContainerRef.current);
-        hammerManager
-          .get("swipe")
-          .set({
-            direction: Hammer.DIRECTION_ALL,
-            threshold: 5,
-            velocity: 0.1,
-          });
+        // Integrate Hammer.js for seamless gestures across the app using document.body so it isn't blocked by pointer-events-none
+        hammerManager = new Hammer.Manager(document.body);
+
+        // Add recognizers
+        hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_ALL, threshold: 5, velocity: 0.1 }));
+        hammerManager.add(new Hammer.Pan({ direction: Hammer.DIRECTION_ALL }));
+        hammerManager.add(new Hammer.Pinch({ enable: true }));
+        hammerManager.add(new Hammer.Rotate({ enable: true }));
+        hammerManager.add(new Hammer.Tap({ event: 'doubletap', taps: 2 }));
+        hammerManager.add(new Hammer.Tap({ event: 'singletap' }));
+
+        // Allow multiple recognizers to work together
+        hammerManager.get('doubletap').recognizeWith('singletap');
+        hammerManager.get('singletap').requireFailure('doubletap');
+        hammerManager.get('pinch').recognizeWith('rotate');
+        hammerManager.get('rotate').recognizeWith('pinch');
+        hammerManager.get('pan').recognizeWith('swipe');
 
         hammerManager.on("swipeup", () => {
           if ((window as any).fullpage_api)
@@ -263,12 +274,57 @@ export const ParallelDataOrchestrator: React.FC = () => {
             (window as any).fullpage_api.moveSlideLeft();
         });
 
+        // Pan fallback for scrolling if swipe wasn't quick enough
+        hammerManager.on("panend", (e) => {
+            if (e.velocity < 0.1 && Math.abs(e.distance) > 50) {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                    if (e.deltaY < 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSectionDown();
+                    else if (e.deltaY > 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSectionUp();
+                } else {
+                    if (e.deltaX < 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSlideRight();
+                    else if (e.deltaX > 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSlideLeft();
+                }
+            }
+        });
+
+        // Tap actions
+        hammerManager.on("doubletap", (e) => {
+            // A fun easter egg, maybe dispatch an effect
+            window.dispatchEvent(new CustomEvent("hammer-doubletap", { detail: { x: e.center.x, y: e.center.y } }));
+            // Return to top level
+            if ((window as any).fullpage_api) {
+                 (window as any).fullpage_api.moveTo(1);
+            }
+        });
+
+        hammerManager.on("singletap", (e) => {
+            window.dispatchEvent(new CustomEvent("hammer-singletap", { detail: { x: e.center.x, y: e.center.y } }));
+        });
+
+        // Pinch & Rotate dispatched as custom events so 3D elements can consume them if they want
+        hammerManager.on("pinch", (e) => {
+            window.dispatchEvent(new CustomEvent("hammer-pinch", { detail: { scale: e.scale } }));
+        });
+        
+        hammerManager.on("rotate", (e) => {
+             window.dispatchEvent(new CustomEvent("hammer-rotate", { detail: { rotation: e.rotation } }));
+        });
+
         fpInitializedRef.current = true;
       } catch (e) {
         console.error("Vanilla fullpage.js initialization failed:", e);
       }
     }
     return () => {
+      if (spawnInterval) clearInterval(spawnInterval);
+      
+      // Cleanup hammer first to avoid memory leaks
+      if (hammerManager) {
+         try {
+             hammerManager.destroy();
+         } catch (e) {}
+      }
+
       if ((window as any).fullpage_api && fpInitializedRef.current) {
         try {
           (window as any).fullpage_api.destroy("all");
