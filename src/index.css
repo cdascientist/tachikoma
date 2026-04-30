@@ -48,6 +48,15 @@ body {
   100% { transform: translate(0); }
 }
 
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 1.5s ease-out forwards;
+}
+
 /* Tron background grid using pure CSS over hardware acceleration to save DOM cycles */
 .tron-css-hardware-grid-layer {
   position: absolute;
