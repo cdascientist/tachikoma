@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Float } from '@react-three/drei';
 
@@ -89,12 +89,13 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     useFrame((state) => {
         const t = state.clock.getElapsedTime();
         if (pointsRef.current) {
-            // Slowly rotate like the background
-            pointsRef.current.rotation.y = Math.sin(t * 0.5) * 0.2 + (type === 'linkedin' ? 0.1 : -0.1);
+            // Slowly rotate continuously
+            pointsRef.current.rotation.y = (t * 0.5) * 0.5 + (type === 'linkedin' ? 0.1 : -0.1);
             pointsRef.current.rotation.x = Math.sin(t * 0.3) * 0.1;
             
-            // Hover effect on scale
-            const targetScale = hovered ? 1.2 : 1.0;
+            // Hover effect on scale (base scale is 0.65)
+            const baseScale = 0.65;
+            const targetScale = hovered ? baseScale * 1.2 : baseScale;
             pointsRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
             
             if (materialRef.current) {
@@ -107,7 +108,7 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     // Create an invisible hitbox for the pointer events
     return (
         <group position={position}>
-            <points ref={pointsRef}>
+            <points ref={pointsRef} scale={[0.65, 0.65, 0.65]}>
                 <bufferGeometry>
                     <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
                     <bufferAttribute attach="attributes-color" count={count} array={colors} itemSize={3} />
@@ -128,6 +129,7 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
                 onClick={() => window.open(url, '_blank')}
                 onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
                 onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+                scale={[0.65, 0.65, 0.65]}
             >
                 <boxGeometry args={[20, 20, 4]} />
                 <meshBasicMaterial transparent opacity={0.0} />
@@ -137,19 +139,37 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
 };
 
 export const SocialIcons3D: React.FC = () => {
+    // For a camera at [0, 50, 600], to place at bottom left/right, we need a position relative to the camera
+    // We can use useThree to dynamically get screen corners if needed, but a fixed wide offset works for most screens
+    const groupRef = useRef<THREE.Group>(null);
+    const { viewport, camera } = useThree();
+    
+    // Get viewport size at Z=530 to accurately place UI relative to edges
+    const currentViewport = viewport.getCurrentViewport(camera, new THREE.Vector3(0, 0, 530));
+    
+    // Base 18 + 25% = 22.5. We bound it by 35% of the viewport width so it doesn't fall off screen on mobile
+    const xOffset = Math.min(22.5, currentViewport.width * 0.35);
+
+    useFrame(({ camera }) => {
+        if (groupRef.current) {
+            // Only show when near the home page coordinates (Z ~ 600)
+            groupRef.current.visible = camera.position.z > 550;
+        }
+    });
+
     return (
-        <group position={[0, 45, 530]}>
+        <group ref={groupRef} position={[0, 25, 530]}>
             <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]}>
                 <ParticleIcon 
                     type="linkedin" 
                     color="#00FFFF" // cyan for LinkedIn feeling but cyberpunk
-                    position={[-15, 0, 0]} 
+                    position={[-xOffset, 0, 0]} 
                     url="https://www.linkedin.com/in/cdascientist/" 
                 />
                 <ParticleIcon 
                     type="instagram" 
                     color="#FF00FF" // fuchsia for Instagram feeling but cyberpunk
-                    position={[15, 0, 0]} 
+                    position={[xOffset, 0, 0]} 
                     url="https://www.instagram.com/cdascientist" 
                 />
             </Float>

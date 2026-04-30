@@ -145,9 +145,7 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
                     sizeAttenuation={true}
                 />
             </points>
-            <group visible={targetPos.current.z === 600}>
-                <SocialIcons3D />
-            </group>
+            <SocialIcons3D />
         </group>
     );
 };

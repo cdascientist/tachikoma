@@ -9,6 +9,7 @@ import Hammer from 'hammerjs';
 import { FloatingStatsWidget } from './FloatingStatsWidget';
 import { FileDropzone } from './FileDropzone';
 import { FileBrowser } from './FileBrowser';
+import { ChatBotInterface } from './ChatBotInterface';
 import { ResumeBreakdownSection } from './ResumeBreakdownSection';
 import fullpage from 'fullpage.js';
 import 'fullpage.js/dist/fullpage.min.css';
@@ -250,16 +251,17 @@ export const ParallelDataOrchestrator: React.FC = () => {
             <div id="fullpage" ref={fullpageContainerRef} className="relative z-10 w-full h-full pointer-events-none">
 
                 {/* ROOM 0: Cyberpunk Landing Overview */}
-                <div className="section transparent-section">
-                    <div className="flex flex-col justify-center items-center h-full p-4 md:p-8 select-none">
-                        <h1 className="text-4xl sm:text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 mb-6 drop-shadow-[0_0_20px_rgba(0,255,255,1)] pointer-events-auto text-center break-words w-full px-2" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                <div className="section transparent-section relative">
+                    <div className="absolute bottom-8 left-0 right-0 flex flex-col justify-end items-center p-4 md:p-8 select-none pointer-events-none z-10 w-full">
+                        <h1 className="text-sm md:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] pointer-events-auto text-center tracking-widest uppercase mb-1">
                             CDA Scientist
                         </h1>
-                        <div className="h-32 md:h-48 w-full pointer-events-none"></div>
-                        <div className="animate-bounce pointer-events-auto flex flex-col items-center">
-                            <span className="text-fuchsia-500 font-mono text-[10px] sm:text-xs md:text-sm tracking-widest mb-2 text-center w-full break-words">START</span>
-                            <svg className="w-5 h-5 md:w-6 md:h-6 text-fuchsia-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                        </div>
+                        <button 
+                            onClick={() => (window as any).fullpage_api?.moveSectionDown()}
+                            className="pointer-events-auto animate-bounce flex items-center justify-center p-1 transition-all duration-300 rounded-full hover:bg-fuchsia-500/10"
+                        >
+                            <svg className="w-8 h-8 md:w-10 md:h-10 text-fuchsia-500 drop-shadow-[0_0_10px_rgba(255,0,255,0.8)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                        </button>
                     </div>
                 </div>
 
@@ -300,7 +302,12 @@ export const ParallelDataOrchestrator: React.FC = () => {
                     </div>
                 </div>
 
-                {/* ROOM 2: Resume Breakdown (Inserted directly under video) */}
+                {/* ROOM 1.5: ChatBot Interface */}
+                <div className="section transparent-section fp-auto-height-responsive">
+                    <ChatBotInterface />
+                </div>
+
+                {/* ROOM 2: Resume Breakdown (Inserted directly under video/chatbot) */}
                 <ResumeBreakdownSection />
 
                 {/* ROOM 3: Architecture Explanation (formerly Room 2) */}

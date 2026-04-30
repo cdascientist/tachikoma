@@ -111,7 +111,7 @@ export const TronVideoPlayer: React.FC<TronVideoPlayerInternalImplementationProp
 
   return (
     <div 
-      className="relative flex flex-col items-center mx-auto pointer-events-auto shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] backdrop-blur-xl bg-black/50 border border-cyan-500/30 rounded-3xl overflow-hidden group w-[calc(100vw-4rem)] md:w-[calc(100vw-10rem)] max-w-[1000px] aspect-video bg-black/80"
+      className="relative flex flex-col items-center mx-auto pointer-events-auto shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] backdrop-blur-xl bg-black/50 border border-cyan-500/30 rounded-3xl overflow-hidden group w-[90vw] h-[80vh] md:w-[calc(100vw-10rem)] md:h-auto md:aspect-video max-w-[1000px] bg-black/80"
     >
       {/* iOS Liquid Glass Video Container */}
       <div className="absolute inset-0 w-full h-full bg-transparent overflow-hidden rounded-3xl">
