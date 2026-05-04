@@ -250,8 +250,6 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager = new Hammer.Manager(document.body);
 
         // Add recognizers
-        hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_ALL, threshold: 5, velocity: 0.1 }));
-        hammerManager.add(new Hammer.Pan({ direction: Hammer.DIRECTION_ALL }));
         hammerManager.add(new Hammer.Pinch({ enable: true }));
         hammerManager.add(new Hammer.Rotate({ enable: true }));
         hammerManager.add(new Hammer.Tap({ event: 'doubletap', taps: 2 }));
@@ -262,46 +260,6 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager.get('singletap').requireFailure('doubletap');
         hammerManager.get('pinch').recognizeWith('rotate');
         hammerManager.get('rotate').recognizeWith('pinch');
-        hammerManager.get('pan').recognizeWith('swipe');
-
-        let lastSwipeTime = 0;
-        const processSwipe = (action: () => void) => {
-          const now = Date.now();
-          if (now - lastSwipeTime > 750) {
-              lastSwipeTime = now;
-              action();
-          }
-        };
-
-        hammerManager.on("swipeup", () => {
-          if ((window as any).fullpage_api)
-            processSwipe(() => (window as any).fullpage_api.moveSectionDown());
-        });
-        hammerManager.on("swipedown", () => {
-          if ((window as any).fullpage_api)
-            processSwipe(() => (window as any).fullpage_api.moveSectionUp());
-        });
-        hammerManager.on("swipeleft", () => {
-          if ((window as any).fullpage_api)
-            processSwipe(() => (window as any).fullpage_api.moveSlideRight());
-        });
-        hammerManager.on("swiperight", () => {
-          if ((window as any).fullpage_api)
-            processSwipe(() => (window as any).fullpage_api.moveSlideLeft());
-        });
-
-        // Pan fallback for scrolling if swipe wasn't quick enough
-        hammerManager.on("panend", (e) => {
-            if (e.velocity < 0.1 && Math.abs(e.distance) > 50) {
-                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-                    if (e.deltaY < 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSectionDown();
-                    else if (e.deltaY > 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSectionUp();
-                } else {
-                    if (e.deltaX < 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSlideRight();
-                    else if (e.deltaX > 0 && (window as any).fullpage_api) (window as any).fullpage_api.moveSlideLeft();
-                }
-            }
-        });
 
         // Tap actions
         hammerManager.on("doubletap", (e) => {
