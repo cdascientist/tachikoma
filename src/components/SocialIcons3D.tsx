@@ -159,8 +159,8 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
 
     return (
         <group ref={groupRef} position={[0, 50, 530]}>
-            {/* We position the float containers directly at the corners so hovering works reliably offset from local 0,0 */}
-            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[-xOffset, yOffset, 0]}>
+            {/* Stacking the LinkedIn icon on top of the Instagram icon on the right side */}
+            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[xOffset, yOffset + 16, 0]}>
                 <ParticleIcon 
                     type="linkedin" 
                     color="#00FFFF" // cyan for LinkedIn feeling but cyberpunk
