@@ -285,7 +285,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
         // Integrate Hammer.js for seamless gestures
         hammerManager = new Hammer.Manager(document.body, {
-            touchAction: 'auto', // Auto allows native scrolling where applicable
+            touchAction: 'none', // Strict touch action to prevent mobile browsers from canceling gestures
         });
 
         // Add recognizers
@@ -322,8 +322,11 @@ export const ParallelDataOrchestrator: React.FC = () => {
           // If interacting with an element that should scroll naturally, check bounds
           if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
               const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
-              // If not at the bottom, don't change section
-              if (el.scrollHeight - el.scrollTop > el.clientHeight + 5) return;
+              // If not at the bottom, don't change section, do inertia scroll instead
+              if (el.scrollHeight - el.scrollTop > el.clientHeight + 5) {
+                  el.scrollBy({ top: 400 * Math.max(1, Math.abs(e.velocityY)), behavior: 'smooth' });
+                  return;
+              }
           }
           processSwipe(() => (window as any).fullpage_api.moveSectionDown());
         });
@@ -332,9 +335,14 @@ export const ParallelDataOrchestrator: React.FC = () => {
           if (!(window as any).fullpage_api) return;
           if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
               const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
-              // If not at the top, don't change section
-              if (el.scrollTop > 5) return;
+              // If not at the top, don't change section, do inertia scroll instead
+              if (el.scrollTop > 5) {
+                  el.scrollBy({ top: -400 * Math.max(1, Math.abs(e.velocityY)), behavior: 'smooth' });
+                  return;
+              }
           }
+          const activeSection = (window as any).fullpage_api.getActiveSection();
+          if (activeSection && activeSection.index === 0) return;
           processSwipe(() => (window as any).fullpage_api.moveSectionUp());
         });
 
@@ -347,11 +355,32 @@ export const ParallelDataOrchestrator: React.FC = () => {
           if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSlideLeft());
         });
 
+        let lastPanY = 0;
+        
         // Pan dispatched globally for interactive background pages to consume
-        hammerManager.on("panstart panmove panend", (e) => {
-            // Do not dispatch pan to background if they are scrolling in a scrollable div
-            if ((e.target as HTMLElement).closest('.overflow-y-auto') && Math.abs(e.deltaY) > Math.abs(e.deltaX)) return;
-            window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type, isFinal: e.isFinal } }));
+        hammerManager.on("panstart", (e) => {
+            lastPanY = e.center.y;
+            if (!(e.target as HTMLElement).closest('.overflow-y-auto')) {
+                window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type, isFinal: e.isFinal } }));
+            }
+        });
+
+        hammerManager.on("panmove", (e) => {
+            const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+            if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                // Manual pan scroll for nested scrollable elements since touchAction is none
+                el.scrollTop -= (e.center.y - lastPanY);
+                lastPanY = e.center.y;
+            } else {
+                lastPanY = e.center.y;
+                window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type, isFinal: e.isFinal } }));
+            }
+        });
+        
+        hammerManager.on("panend", (e) => {
+             if (!(e.target as HTMLElement).closest('.overflow-y-auto')) {
+                 window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type, isFinal: e.isFinal } }));
+             }
         });
 
         // Tap actions
@@ -457,29 +486,29 @@ export const ParallelDataOrchestrator: React.FC = () => {
             <div className="section transparent-section relative">
               <InteractiveGesturePage />
               <div className="absolute bottom-8 left-0 right-0 flex flex-col justify-end items-center p-4 md:p-8 select-none pointer-events-none z-10 w-full">
-                <h1 className="text-sm md:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] pointer-events-auto text-center tracking-widest uppercase mb-1">
-                  CDA Scientist
-                </h1>
-                <button
-                  onClick={() =>
-                    (window as any).fullpage_api?.moveSectionDown()
-                  }
-                  className="pointer-events-auto animate-bounce flex items-center justify-center p-1 transition-all duration-300 rounded-full hover:bg-fuchsia-500/10"
+                <div 
+                  className="cursor-pointer pointer-events-auto flex flex-col items-center hover:scale-105 transition-transform group"
+                  onClick={() => (window as any).fullpage_api?.moveSectionDown()}
                 >
-                  <svg
-                    className="w-8 h-8 md:w-10 md:h-10 text-fuchsia-500 drop-shadow-[0_0_10px_rgba(255,0,255,0.8)]"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2.5"
-                      d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                    ></path>
-                  </svg>
-                </button>
+                  <h1 className="text-sm md:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] text-center tracking-widest uppercase mb-1">
+                    CDA Scientist
+                  </h1>
+                  <button className="animate-bounce flex items-center justify-center p-1 transition-all duration-300 rounded-full group-hover:bg-fuchsia-500/20">
+                    <svg
+                      className="w-8 h-8 md:w-10 md:h-10 text-fuchsia-500 drop-shadow-[0_0_10px_rgba(255,0,255,0.8)]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2.5"
+                        d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 

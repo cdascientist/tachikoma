@@ -81,6 +81,10 @@ body {
   background: transparent !important;
 }
 
+.overflow-y-auto {
+  touch-action: pan-y !important;
+}
+
 /* Custom Scrollbars */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

@@ -8,22 +8,22 @@ export const FloatingSpheres: React.FC = React.memo(() => {
     // Generate random sphere positions and scale in the medium distance
     const spheres = useMemo(() => {
         const items = [];
-        for (let i = 0; i < 12; i++) {
-            // Medium distance: X: -300 to 300, Y: -100 to 200, Z: 200 to 400
-            const x = (Math.random() - 0.5) * 800;
-            const y = (Math.random() - 0.5) * 400 + 50;
-            const z = Math.random() * 300 + 100;
+        for (let i = 0; i < 15; i++) {
+            // Farther distance and wider spread
+            const x = (Math.random() - 0.5) * 1600;
+            const y = (Math.random() - 0.5) * 1000 + 100;
+            const z = Math.random() * 600 - 100;
             
-            const speed = Math.random() * 0.02 + 0.005;
-            const radius = (Math.random() * 4 + 2) * 5; // 5x larger
+            const speed = Math.random() * 0.01 + 0.002;
+            const radius = (Math.random() * 5 + 3) * 10; // larger
             const phaseX = Math.random() * Math.PI * 2;
             const phaseY = Math.random() * Math.PI * 2;
             
-            // Cyberpunk colors: Cyan or Fuchsia
+            // Cyberpunk colors but darker: Dark Cyan or Dark Fuchsia
             const isCyan = Math.random() > 0.5;
             const color = isCyan 
-                ? new THREE.Color(0x00ffff) 
-                : new THREE.Color(0xff00ff);
+                ? new THREE.Color(0x004444) 
+                : new THREE.Color(0x440044);
 
             items.push({ x, y, z, speed, radius, phaseX, phaseY, color });
         }

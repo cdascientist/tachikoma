@@ -42,16 +42,10 @@ export const InteractiveGesturePage: React.FC = React.memo(() => {
                     <Hand className="w-12 h-12 text-cyan-400 relative z-10 animate-pulse" strokeWidth={1.5} />
                 </div>
                 
-                <div className="mb-8">
-                    <h2 className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-400 mb-3 font-mono tracking-tight">
+                <div className="mb-6">
+                    <h2 className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-400 font-mono tracking-tight">
                         INTERACTIVE SPACE
                     </h2>
-                    <p className="text-gray-300 text-sm mb-6 font-medium drop-shadow-md leading-relaxed border-l-2 border-cyan-500/30 pl-4">
-                        Touch and drag to pan camera.<br/>
-                        Double tap to zoom forward.<br/>
-                        Swipe up/down to navigate pages.<br/>
-                        Swipe left/right to navigate slides.
-                    </p>
                 </div>
                 
                 <div className="flex flex-col gap-4">
