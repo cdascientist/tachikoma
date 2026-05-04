@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { AutomatedMemoryCleaner } from '../lib/AutomatedMemoryCleaner';
 
 import { SocialIcons3D } from './SocialIcons3D';
+import { FloatingSpheres } from './FloatingSpheres';
 import { workerCode } from '../workers/PanningWorker';
 
 interface HolographicRoomSceneProperties {
@@ -80,22 +81,19 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
             } else if (destIndex === 2) { // Video
                 tp = [slideIndex * 200, 50, 200];   
                 tl = [slideIndex * 200, 50, -500]; 
-            } else if (destIndex === 3) { // Gesture Interactive Background
-                tp = [0, 150, 100];
-                tl = [0, 150, -200];
-            } else if (destIndex === 4) { // Infrastructure Explanation
+            } else if (destIndex === 3) { // Infrastructure Explanation
                 tp = [-500, 200, -100];
                 tl = [-500, 200, -200];
-            } else if (destIndex === 5) { // Resume
+            } else if (destIndex === 4) { // Resume
                 tp = [300 + (slideIndex * 350), -100 - (slideIndex * 100), -300 - (slideIndex * 250)]; 
                 tl = [0, (slideIndex * -80), 0];
-            } else if (destIndex === 6) { // Dynamic Thread
+            } else if (destIndex === 5) { // Dynamic Thread
                 tp = [500, 150, -100];
                 tl = [500, 100, -500];
-            } else if (destIndex === 7) { // Nexus
+            } else if (destIndex === 6) { // Nexus
                 tp = [0, -100, 0];
                 tl = [0, -100, -500];
-            } else if (destIndex >= 8) { // End hub
+            } else if (destIndex >= 7) { // End hub
                 tp = [200, 300, 400]; 
                 tl = [0, 0, 0];
             }
@@ -111,8 +109,8 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
         };
 
         const onPan = (e: any) => {
-            // Only strictly override manual panning for Room 3
-            if (currentRoomDest === 3) {
+            // Only strictly override manual panning for Room 0 (Landing)
+            if (currentRoomDest === 0) {
                 const { deltaX, deltaY, type } = e.detail;
                 // Move position horizontally/vertically based on touch delta
                 const panFactor = 0.5;
@@ -133,7 +131,7 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
         };
 
         const onDoubleTap = (e: any) => {
-            if (currentRoomDest === 3) {
+            if (currentRoomDest === 0) {
                 // Zoom forward into the holographic space
                 const zoomFactor = 100;
                 baseTp[2] -= zoomFactor;
@@ -230,6 +228,7 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                     sizeAttenuation={true}
                 />
             </points>
+            <FloatingSpheres />
             <SocialIcons3D />
         </group>
     );

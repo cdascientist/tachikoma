@@ -20,7 +20,7 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
 
             {/* Slide 0: Identity & Profile */}
             <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full">
+                <div className="flex flex-col min-h-screen justify-center items-center select-none max-w-5xl mx-auto w-full overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 mb-6 drop-shadow-[0_0_15px_rgba(0,255,255,0.8)] pointer-events-auto text-center">
                         CM SISK (CDA SCIENTIST)
                     </h2>
@@ -47,7 +47,7 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
 
             {/* Slide 1: Skills & Stack */}
             <div className="slide px-4 md:px-8">
-               <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full">
+               <div className="flex flex-col min-h-screen justify-center items-center select-none max-w-5xl mx-auto w-full overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl md:text-5xl text-cyan-400 mb-6 font-mono drop-shadow-[0_0_15px_#0ff] pointer-events-auto text-center uppercase tracking-widest">
                         Technical Arsenal
                     </h2>
@@ -101,8 +101,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 2: Exhaustive Skills Matrix */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl md:text-5xl text-blue-400 mb-6 font-mono drop-shadow-[0_0_15px_rgba(59,130,246,0.8)] pointer-events-auto text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full uppercase">
                         EXHAUSTIVE SKILLS MATRIX
                     </h2>
@@ -141,8 +141,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 3: Recent ML Trajectory */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-cyan-300 mb-6 font-mono drop-shadow-[0_0_15px_rgba(0,255,255,0.6)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full">
                         RECENT ML TRAJECTORY
                     </h2>
@@ -175,8 +175,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 4: Systems & Analytical Roles */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-yellow-300 mb-6 font-mono drop-shadow-[0_0_15px_rgba(255,255,0,0.6)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full">
                         SYSTEMS & ANALYTICAL ROLES
                     </h2>
@@ -210,8 +210,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 5: Software & Automation Engineering */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-emerald-400 mb-6 font-mono drop-shadow-[0_0_15px_rgba(16,185,129,0.8)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full uppercase">
                         SOFTWARE & AUTOMATION
                     </h2>
@@ -239,8 +239,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 6: Education & Community */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-orange-400 mb-6 font-mono drop-shadow-[0_0_15px_rgba(249,115,22,0.8)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full uppercase">
                         EDUCATION & COMMUNITY
                     </h2>
@@ -286,8 +286,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 7: Research 1 */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-purple-400 mb-6 font-mono drop-shadow-[0_0_15px_rgba(168,85,247,0.8)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full uppercase">
                         RESEARCH: PREDETERMINISM
                     </h2>
@@ -320,8 +320,8 @@ export const ResumeBreakdownSection: React.FC = React.memo(() => {
             </div>
 
             {/* Slide 8: Research 2 */}
-            <div className="slide px-4 md:px-8">
-                <div className="flex flex-col h-full justify-center items-center select-none max-w-5xl mx-auto w-full pointer-events-auto">
+            <div className="slide px-4 md:px-8 relative h-full">
+                <div className="flex flex-col min-h-screen items-center select-none max-w-5xl mx-auto w-full pointer-events-auto overflow-y-auto pt-20 pb-32">
                     <h2 className="text-3xl sm:text-4xl text-rose-400 mb-6 font-mono drop-shadow-[0_0_15px_rgba(244,63,94,0.8)] text-center sticky top-0 bg-black/50 py-4 backdrop-blur-md z-10 w-full uppercase">
                         RESEARCH: SCM FRAMEWORK
                     </h2>

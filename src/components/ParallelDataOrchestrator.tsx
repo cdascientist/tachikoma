@@ -219,11 +219,14 @@ export const ParallelDataOrchestrator: React.FC = () => {
         // @ts-ignore
         new fullpage(fullpageContainerRef.current, {
           licenseKey: "gplv3-license",
-          scrollingSpeed: 1200, // Slightly slower for smooth holographic transitions
+          scrollingSpeed: 1000, 
           navigation: true,
           slidesNavigation: false,
           controlArrows: false,
-          credits: { enabled: false }, // Disabling watermark
+          normalScrollElements: '.overflow-y-auto, .scrollable-content',
+          credits: { enabled: false }, 
+          // Disable fullpage's native touch scrolling to use our Hammer implementation
+          touchSensitivity: 10000, // Make it practically impossible to trigger native fullpage touch
           onLeave: (origin: any, destination: any, direction: string) => {
             window.dispatchEvent(
               new CustomEvent("fullpage-room-change", {
@@ -247,12 +250,47 @@ export const ParallelDataOrchestrator: React.FC = () => {
             );
           },
         });
-        // Integrate Hammer.js for seamless gestures across the app using document.body so it isn't blocked by pointer-events-none
-        hammerManager = new Hammer.Manager(document.body);
+        
+        // Disable fullpage native touch if api is available, though touchSensitivity above handles it for free version
+        if ((window as any).fullpage_api) {
+            (window as any).fullpage_api.setAllowScrolling(false, 'up, down, left, right');
+            (window as any).fullpage_api.setKeyboardScrolling(true);
+        }
+
+        // We want mousewheel to still work but touch to be pure hammer
+        const handleWheel = (e: WheelEvent) => {
+            if (!(window as any).fullpage_api) return;
+            const activeSection = (window as any).fullpage_api.getActiveSection();
+            if (activeSection && activeSection.index === 0 && e.deltaY > 0) return; // Prevent wheel down on 1st section
+            
+            if (e.deltaY > 0) {
+               // Check if scrolling in an element
+               if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
+                   const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+                   if (el.scrollHeight - el.scrollTop > el.clientHeight + 5) return;
+               }
+               (window as any).fullpage_api.moveSectionDown();
+            } else if (e.deltaY < 0) {
+               if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
+                   const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+                   if (el.scrollTop > 5) return;
+               }
+               (window as any).fullpage_api.moveSectionUp();
+            }
+        };
+
+        // We add our own wheel handler since we disabled fullpage native scrolling
+        (window as any)._customWheelHandler = handleWheel;
+        window.addEventListener('wheel', (window as any)._customWheelHandler, { passive: false });
+
+        // Integrate Hammer.js for seamless gestures
+        hammerManager = new Hammer.Manager(document.body, {
+            touchAction: 'auto', // Auto allows native scrolling where applicable
+        });
 
         // Add recognizers
-        hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_ALL, threshold: 5, velocity: 0.2 }));
-        hammerManager.add(new Hammer.Pan({ direction: Hammer.DIRECTION_ALL }));
+        hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_ALL, threshold: 10, velocity: 0.3 }));
+        hammerManager.add(new Hammer.Pan({ direction: Hammer.DIRECTION_ALL, threshold: 10 }));
         hammerManager.add(new Hammer.Pinch({ enable: true }));
         hammerManager.add(new Hammer.Rotate({ enable: true }));
         hammerManager.add(new Hammer.Tap({ event: 'doubletap', taps: 2 }));
@@ -263,34 +301,57 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager.get('singletap').requireFailure('doubletap');
         hammerManager.get('pinch').recognizeWith('rotate');
         hammerManager.get('rotate').recognizeWith('pinch');
-        hammerManager.get('pan').recognizeWith('swipe');
+        hammerManager.get('swipe').recognizeWith('pan');
 
         // Throttle swipe explicitly to completely avoid double jump/skipping
         let lastSwipeTime = 0;
         const processSwipe = (action: () => void) => {
           const now = Date.now();
-          if (now - lastSwipeTime > 1000) {
+          if (now - lastSwipeTime > 1200) { // 1.2s cooldown to prevent multiple pages skip
               lastSwipeTime = now;
               action();
           }
         };
 
-        hammerManager.on("swipeup", () => {
-          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSectionDown());
+        // Swipe up/down for section navigation
+        hammerManager.on("swipeup", (e) => {
+          if (!(window as any).fullpage_api) return;
+          const activeSection = (window as any).fullpage_api.getActiveSection();
+          if (activeSection && activeSection.index === 0) return; // Prevent swipe down on 1st section
+
+          // If interacting with an element that should scroll naturally, check bounds
+          if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
+              const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+              // If not at the bottom, don't change section
+              if (el.scrollHeight - el.scrollTop > el.clientHeight + 5) return;
+          }
+          processSwipe(() => (window as any).fullpage_api.moveSectionDown());
         });
-        hammerManager.on("swipedown", () => {
-          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSectionUp());
+        
+        hammerManager.on("swipedown", (e) => {
+          if (!(window as any).fullpage_api) return;
+          if ((e.target as HTMLElement).closest('.overflow-y-auto')) {
+              const el = (e.target as HTMLElement).closest('.overflow-y-auto') as HTMLElement;
+              // If not at the top, don't change section
+              if (el.scrollTop > 5) return;
+          }
+          processSwipe(() => (window as any).fullpage_api.moveSectionUp());
         });
-        hammerManager.on("swipeleft", () => {
+
+        // Swipe left/right for slides navigation
+        hammerManager.on("swipeleft", (e) => {
           if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSlideRight());
         });
-        hammerManager.on("swiperight", () => {
+        
+        hammerManager.on("swiperight", (e) => {
           if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSlideLeft());
         });
 
         // Pan dispatched globally for interactive background pages to consume
         hammerManager.on("panstart panmove panend", (e) => {
-             window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type } }));
+            // Do not dispatch pan to background if they are scrolling in a scrollable div
+            if ((e.target as HTMLElement).closest('.overflow-y-auto') && Math.abs(e.deltaY) > Math.abs(e.deltaX)) return;
+            window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type, isFinal: e.isFinal } }));
         });
 
         // Tap actions
@@ -325,6 +386,11 @@ export const ParallelDataOrchestrator: React.FC = () => {
              hammerManager.destroy();
          } catch (e) {}
       }
+      
+      // We must remove wheel listener when we cleanup
+      const handleWheel = (e: WheelEvent) => {}; // Just dummy for compilation inside cleanup scope, actually we must reference it
+      // Let's store handleWheel outside or just use window.removeEventListener
+      window.removeEventListener('wheel', (window as any)._customWheelHandler);
 
       if ((window as any).fullpage_api && fpInitializedRef.current) {
         try {
@@ -389,6 +455,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
           >
             {/* ROOM 0: Cyberpunk Landing Overview */}
             <div className="section transparent-section relative">
+              <InteractiveGesturePage />
               <div className="absolute bottom-8 left-0 right-0 flex flex-col justify-end items-center p-4 md:p-8 select-none pointer-events-none z-10 w-full">
                 <h1 className="text-sm md:text-base font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 drop-shadow-[0_0_10px_rgba(0,255,255,0.5)] pointer-events-auto text-center tracking-widest uppercase mb-1">
                   CDA Scientist
@@ -488,12 +555,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
               </div>
             </div>
 
-            {/* ROOM 3: Interactive Gesture Background */}
-            <div className="section transparent-section">
-              <InteractiveGesturePage />
-            </div>
-
-            {/* ROOM 4: Architecture Explanation (formerly Room 3) */}
+            {/* ROOM 3: Architecture Explanation (formerly Room 4) */}
             <div className="section transparent-section">
               <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 text-center select-none w-full max-w-5xl mx-auto">
                 <h2
