@@ -43,7 +43,7 @@ export const FloatingStatsWidget: React.FC<{ workerCount: number; executionCount
                     const memInfo = (performance as any).memory;
                     setMemory(`${(memInfo.usedJSHeapSize / 1048576).toFixed(1)} MB`);
                 } else {
-                    setMemory('N/A');
+                    setMemory('Restricted');
                 }
             }
 

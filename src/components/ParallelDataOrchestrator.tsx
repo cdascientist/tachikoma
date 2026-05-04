@@ -11,6 +11,7 @@ import { FileDropzone } from "./FileDropzone";
 import { FileBrowser } from "./FileBrowser";
 import { ChatBotInterface } from "./ChatBotInterface";
 import { ResumeBreakdownSection } from "./ResumeBreakdownSection";
+import { InteractiveGesturePage } from "./InteractiveGesturePage";
 import fullpage from "fullpage.js";
 import "fullpage.js/dist/fullpage.min.css";
 
@@ -250,6 +251,8 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager = new Hammer.Manager(document.body);
 
         // Add recognizers
+        hammerManager.add(new Hammer.Swipe({ direction: Hammer.DIRECTION_ALL, threshold: 5, velocity: 0.2 }));
+        hammerManager.add(new Hammer.Pan({ direction: Hammer.DIRECTION_ALL }));
         hammerManager.add(new Hammer.Pinch({ enable: true }));
         hammerManager.add(new Hammer.Rotate({ enable: true }));
         hammerManager.add(new Hammer.Tap({ event: 'doubletap', taps: 2 }));
@@ -260,15 +263,39 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager.get('singletap').requireFailure('doubletap');
         hammerManager.get('pinch').recognizeWith('rotate');
         hammerManager.get('rotate').recognizeWith('pinch');
+        hammerManager.get('pan').recognizeWith('swipe');
+
+        // Throttle swipe explicitly to completely avoid double jump/skipping
+        let lastSwipeTime = 0;
+        const processSwipe = (action: () => void) => {
+          const now = Date.now();
+          if (now - lastSwipeTime > 1000) {
+              lastSwipeTime = now;
+              action();
+          }
+        };
+
+        hammerManager.on("swipeup", () => {
+          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSectionDown());
+        });
+        hammerManager.on("swipedown", () => {
+          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSectionUp());
+        });
+        hammerManager.on("swipeleft", () => {
+          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSlideRight());
+        });
+        hammerManager.on("swiperight", () => {
+          if ((window as any).fullpage_api) processSwipe(() => (window as any).fullpage_api.moveSlideLeft());
+        });
+
+        // Pan dispatched globally for interactive background pages to consume
+        hammerManager.on("panstart panmove panend", (e) => {
+             window.dispatchEvent(new CustomEvent("hammer-pan", { detail: { deltaX: e.deltaX, deltaY: e.deltaY, type: e.type } }));
+        });
 
         // Tap actions
         hammerManager.on("doubletap", (e) => {
-            // A fun easter egg, maybe dispatch an effect
             window.dispatchEvent(new CustomEvent("hammer-doubletap", { detail: { x: e.center.x, y: e.center.y } }));
-            // Return to top level
-            if ((window as any).fullpage_api) {
-                 (window as any).fullpage_api.moveTo(1);
-            }
         });
 
         hammerManager.on("singletap", (e) => {
@@ -461,7 +488,12 @@ export const ParallelDataOrchestrator: React.FC = () => {
               </div>
             </div>
 
-            {/* ROOM 3: Architecture Explanation (formerly Room 3) */}
+            {/* ROOM 3: Interactive Gesture Background */}
+            <div className="section transparent-section">
+              <InteractiveGesturePage />
+            </div>
+
+            {/* ROOM 4: Architecture Explanation (formerly Room 3) */}
             <div className="section transparent-section">
               <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 text-center select-none w-full max-w-5xl mx-auto">
                 <h2

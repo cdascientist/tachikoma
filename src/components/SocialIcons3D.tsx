@@ -148,7 +148,7 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     // Place icons slightly inward from the absolute edges
     // The center of our group will be at [0, 50, 530] (matching camera's line of sight over local Z)
     const xOffset = currentViewport.width / 2 - 12;
-    const yOffset = -currentViewport.height / 2 + 18; // Moved up slightly to align with CDA SCIENTIST
+    const yOffset = -currentViewport.height / 2 + 20; // Moved up slightly to align with CDA SCIENTIST
 
     useFrame(({ camera }) => {
         if (groupRef.current) {
