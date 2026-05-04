@@ -5,7 +5,7 @@ import {
     HeartHandshake, Building2, Microscope, Layers, Lightbulb, GraduationCap
 } from 'lucide-react';
 
-export const ResumeBreakdownSection: React.FC = () => {
+export const ResumeBreakdownSection: React.FC = React.memo(() => {
     const nextSlide = () => (window as any).fullpage_api?.moveSlideRight();
     const prevSlide = () => (window as any).fullpage_api?.moveSlideLeft();
 
@@ -364,4 +364,4 @@ export const ResumeBreakdownSection: React.FC = () => {
 
         </div>
     );
-};
+});

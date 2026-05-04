@@ -138,17 +138,17 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     );
 };
 
-export const SocialIcons3D: React.FC = () => {
-    // For a camera at [0, 50, 600], to place at bottom left/right, we need a position relative to the camera
-    // We can use useThree to dynamically get screen corners if needed, but a fixed wide offset works for most screens
+    export const SocialIcons3D: React.FC = () => {
     const groupRef = useRef<THREE.Group>(null);
     const { viewport, camera } = useThree();
     
     // Get viewport size at Z=530 to accurately place UI relative to edges
-    const currentViewport = viewport.getCurrentViewport(camera, new THREE.Vector3(0, 0, 530));
+    const currentViewport = viewport.getCurrentViewport(camera, new THREE.Vector3(0, 50, 530));
     
-    // Base 18 + 25% = 22.5. We bound it by 35% of the viewport width so it doesn't fall off screen on mobile
-    const xOffset = Math.min(22.5, currentViewport.width * 0.35);
+    // Place icons slightly inward from the absolute edges
+    // The center of our group will be at [0, 50, 530] (matching camera's line of sight over local Z)
+    const xOffset = currentViewport.width / 2 - 12;
+    const yOffset = -currentViewport.height / 2 + 10; // Bottom of the viewport
 
     useFrame(({ camera }) => {
         if (groupRef.current) {
@@ -158,18 +158,21 @@ export const SocialIcons3D: React.FC = () => {
     });
 
     return (
-        <group ref={groupRef} position={[0, 25, 530]}>
-            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]}>
+        <group ref={groupRef} position={[0, 50, 530]}>
+            {/* We position the float containers directly at the corners so hovering works reliably offset from local 0,0 */}
+            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[-xOffset, yOffset, 0]}>
                 <ParticleIcon 
                     type="linkedin" 
                     color="#00FFFF" // cyan for LinkedIn feeling but cyberpunk
-                    position={[-xOffset, 0, 0]} 
+                    position={[0, 0, 0]} 
                     url="https://www.linkedin.com/in/cdascientist/" 
                 />
+            </Float>
+            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[xOffset, yOffset, 0]}>
                 <ParticleIcon 
                     type="instagram" 
                     color="#FF00FF" // fuchsia for Instagram feeling but cyberpunk
-                    position={[xOffset, 0, 0]} 
+                    position={[0, 0, 0]} 
                     url="https://www.instagram.com/cdascientist" 
                 />
             </Float>

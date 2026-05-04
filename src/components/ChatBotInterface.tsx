@@ -73,7 +73,7 @@ const ParticleOrb: React.FC<{ isListening: boolean }> = ({ isListening }) => {
     );
 };
 
-export const ChatBotInterface: React.FC = () => {
+export const ChatBotInterface: React.FC = React.memo(() => {
     const [isListening, setIsListening] = useState(false);
 
     return (
@@ -112,4 +112,4 @@ export const ChatBotInterface: React.FC = () => {
             </div>
         </div>
     );
-};
+});

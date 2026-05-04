@@ -23,12 +23,14 @@ export interface GeometryChunkDataPayload {
 
 // Drastically increase parallelism and adjust polygon density for mobile/desktop parity
 const PARALLEL_WORKER_THREAD_POOL_SIZE =
-  navigator.hardwareConcurrency * 4 || 16;
-const BASE_POLYGON_MULTIPLIER = 1;
+  navigator.hardwareConcurrency * 8 || 48; // Significantly more workers
+const BASE_POLYGON_MULTIPLIER = 1.1;
 
 export const ParallelDataOrchestrator: React.FC = () => {
   const [isGlobalInitializationComplete, setIsGlobalInitializationComplete] =
     useState<boolean>(false);
+  const [loaderOpacity, setLoaderOpacity] = useState<number>(1);
+  const [loaderMounted, setLoaderMounted] = useState<boolean>(true);
   const [aggregatedDataChunkVault, setAggregatedDataChunkVault] = useState<
     GeometryChunkDataPayload[]
   >([]);
@@ -85,7 +87,13 @@ export const ParallelDataOrchestrator: React.FC = () => {
         );
         setAggregatedDataChunkVault(temporaryStagingAggregatorBuffer);
         setOperationalCount((prev) => prev + PARALLEL_WORKER_THREAD_POOL_SIZE);
-        setIsGlobalInitializationComplete(true);
+        
+        // Offset the initial load and give Three.js time to compile shaders & upload buffers to GPU
+        setTimeout(() => {
+            setIsGlobalInitializationComplete(true);
+            setTimeout(() => setLoaderOpacity(0), 1000);
+            setTimeout(() => setLoaderMounted(false), 2500);
+        }, 1200);
         return;
       }
 
@@ -116,17 +124,17 @@ export const ParallelDataOrchestrator: React.FC = () => {
           const seed = Math.random();
 
           if (seed < 0.33) {
-            x = (Math.random() - 0.5) * 2000;
+            x = (Math.random() - 0.5) * 6000;
             y = -50 + Math.sin(contiguousVertexIndex) * 20;
-            z = (Math.random() - 0.5) * 2000;
+            z = (Math.random() - 0.5) * 6000;
           } else if (seed < 0.66) {
             x =
-              (Math.random() > 0.5 ? 1 : -1) * 800 +
-              (Math.random() - 0.5) * 100;
-            y = (Math.random() - 0.5) * 1000;
-            z = (Math.random() - 0.5) * 2000;
+              (Math.random() > 0.5 ? 1 : -1) * 2000 +
+              (Math.random() - 0.5) * 200;
+            y = (Math.random() - 0.5) * 2000;
+            z = (Math.random() - 0.5) * 6000;
           } else {
-            const r = 300 * Math.cbrt(Math.random());
+            const r = 1000 * Math.cbrt(Math.random());
             const theta = Math.random() * 2 * Math.PI;
             const phi = Math.acos(2 * Math.random() - 1);
             x = -500 + r * Math.sin(phi) * Math.cos(theta);
@@ -181,7 +189,13 @@ export const ParallelDataOrchestrator: React.FC = () => {
           (a, b) => a.chunkIndexIdentifier - b.chunkIndexIdentifier,
         );
         setAggregatedDataChunkVault([...temporaryStagingAggregatorBuffer]);
-        setIsGlobalInitializationComplete(true);
+        
+        // Offset the initial load and give Three.js time to compile shaders & upload buffers to GPU
+        setTimeout(() => {
+          setIsGlobalInitializationComplete(true);
+          setTimeout(() => setLoaderOpacity(0), 1000);
+          setTimeout(() => setLoaderMounted(false), 2500);
+        }, 1200);
       });
     };
 
@@ -201,13 +215,6 @@ export const ParallelDataOrchestrator: React.FC = () => {
       isGlobalInitializationComplete
     ) {
       try {
-        // Dynamically continuously spawn workers to boost architecture performance numbers
-        spawnInterval = setInterval(() => {
-          if (latestFpsRef.current < 70) {
-            spawnDynamicWorker();
-          }
-        }, 300);
-
         // @ts-ignore
         new fullpage(fullpageContainerRef.current, {
           licenseKey: "gplv3-license",
@@ -257,21 +264,30 @@ export const ParallelDataOrchestrator: React.FC = () => {
         hammerManager.get('rotate').recognizeWith('pinch');
         hammerManager.get('pan').recognizeWith('swipe');
 
+        let lastSwipeTime = 0;
+        const processSwipe = (action: () => void) => {
+          const now = Date.now();
+          if (now - lastSwipeTime > 750) {
+              lastSwipeTime = now;
+              action();
+          }
+        };
+
         hammerManager.on("swipeup", () => {
           if ((window as any).fullpage_api)
-            (window as any).fullpage_api.moveSectionDown();
+            processSwipe(() => (window as any).fullpage_api.moveSectionDown());
         });
         hammerManager.on("swipedown", () => {
           if ((window as any).fullpage_api)
-            (window as any).fullpage_api.moveSectionUp();
+            processSwipe(() => (window as any).fullpage_api.moveSectionUp());
         });
         hammerManager.on("swipeleft", () => {
           if ((window as any).fullpage_api)
-            (window as any).fullpage_api.moveSlideRight();
+            processSwipe(() => (window as any).fullpage_api.moveSlideRight());
         });
         hammerManager.on("swiperight", () => {
           if ((window as any).fullpage_api)
-            (window as any).fullpage_api.moveSlideLeft();
+            processSwipe(() => (window as any).fullpage_api.moveSlideLeft());
         });
 
         // Pan fallback for scrolling if swipe wasn't quick enough
@@ -337,10 +353,11 @@ export const ParallelDataOrchestrator: React.FC = () => {
   return (
     <div className="relative w-full h-screen bg-[#050505] text-white overflow-hidden">
       {/* Conditional Sub-4ms First Paint Optimization Loader */}
-      {!isGlobalInitializationComplete && (
+      {loaderMounted && (
         <div
           id="parallel-preloader-container"
-          className="absolute inset-0 z-50 flex flex-col justify-center items-center bg-black transition-opacity duration-500"
+          className="absolute inset-0 z-50 flex flex-col justify-center items-center bg-black transition-opacity duration-1000 ease-in-out pointer-events-none"
+          style={{ opacity: loaderOpacity }}
         >
           <h1 className="glitch-loader-text text-4xl text-cyan-400 font-black tracking-widest uppercase">
             loading
@@ -364,9 +381,12 @@ export const ParallelDataOrchestrator: React.FC = () => {
           {/* Global Holographic Canvas - Detached from Fullpage DOM Mutations */}
           <div className="fixed inset-0 z-0 w-full h-full">
             <Canvas
+              dpr={[1, 1.5]}
+              gl={{ powerPreference: "high-performance", antialias: false, alpha: false }}
               camera={{
                 position: [0, 50, 600],
                 fov: window.innerWidth < 768 ? 100 : 75,
+                far: 50000,
               }}
             >
               <ambientLight intensity={0.5} />
@@ -411,7 +431,12 @@ export const ParallelDataOrchestrator: React.FC = () => {
               </div>
             </div>
 
-            {/* ROOM 1: Horizontal Video Flow */}
+            {/* ROOM 1: ChatBot Interface */}
+            <div className="section transparent-section fp-auto-height-responsive">
+              <ChatBotInterface />
+            </div>
+
+            {/* ROOM 2: Horizontal Video Flow */}
             <div className="section transparent-section relative">
               {/* Custom Glowing Navigation Particles */}
               <button
@@ -478,15 +503,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
               </div>
             </div>
 
-            {/* ROOM 1.5: ChatBot Interface */}
-            <div className="section transparent-section fp-auto-height-responsive">
-              <ChatBotInterface />
-            </div>
-
-            {/* ROOM 2: Resume Breakdown (Inserted directly under video/chatbot) */}
-            <ResumeBreakdownSection />
-
-            {/* ROOM 3: Architecture Explanation (formerly Room 2) */}
+            {/* ROOM 3: Architecture Explanation (formerly Room 3) */}
             <div className="section transparent-section">
               <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 text-center select-none w-full max-w-5xl mx-auto">
                 <h2
@@ -575,6 +592,9 @@ export const ParallelDataOrchestrator: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* ROOM 3: Resume Breakdown (moved from room 2 location) */}
+            <ResumeBreakdownSection />
 
             {/* ROOM 3: Dynamic Worker Spawning */}
             <div className="section transparent-section">

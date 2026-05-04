@@ -1,15 +1,16 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { AutomatedMemoryCleaner } from '../lib/AutomatedMemoryCleaner';
 
 import { SocialIcons3D } from './SocialIcons3D';
+import { workerCode } from '../workers/PanningWorker';
 
 interface HolographicRoomSceneProperties {
     aggregatedParallelDataChunksMatrix: any[];
 }
 
-export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
+export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = React.memo(({
     aggregatedParallelDataChunksMatrix
 }) => {
     const { camera, gl } = useThree();
@@ -23,10 +24,30 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
         });
     }, [gl]);
 
-    // Fast-tracking camera target interpolators
-    const targetPos = useRef(new THREE.Vector3(0, 50, 600));
-    const targetLookAt = useRef(new THREE.Vector3(0, 50, 0));
-    const currentLookAt = useRef(new THREE.Vector3(0, 50, 0));
+    // Use Web Workers for purely offloaded high-performance camera panning and interpolations
+    const panningWorkerRef = useRef<Worker | null>(null);
+    const workerCameraPos = useRef(new THREE.Vector3(0, 50, 600));
+    const workerLookAt = useRef(new THREE.Vector3(0, 50, 0));
+
+    useEffect(() => {
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        const worker = new Worker(url);
+        panningWorkerRef.current = worker;
+
+        worker.onmessage = (e) => {
+            if (e.data.type === 'TICK_RESULT') {
+                workerCameraPos.current.set(e.data.currentPos[0], e.data.currentPos[1], e.data.currentPos[2]);
+                workerLookAt.current.set(e.data.currentLookAt[0], e.data.currentLookAt[1], e.data.currentLookAt[2]);
+            }
+        };
+
+        return () => {
+             worker.terminate();
+             URL.revokeObjectURL(url);
+        };
+    }, []);
+
     const pointCloudRef = useRef<THREE.Points>(null);
 
     useEffect(() => {
@@ -42,34 +63,40 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
         const onRoomChange = (e: any) => {
             const destIndex = e.detail?.sectionIndex ?? e.detail;
             const slideIndex = e.detail?.slideIndex ?? 0;
+            let tp = [0, 50, 600];
+            let tl = [0, 50, 0];
 
             if (destIndex === 0) {
-                targetPos.current.set(0, 50, 600);
-                targetLookAt.current.set(0, 50, 0);
+                tp = [0, 50, 600];
+                tl = [0, 50, 0];
             } else if (destIndex === 1) {
-                // Video page - move depending on slide
-                targetPos.current.set(slideIndex * 200, 50, 200);   
-                targetLookAt.current.set(slideIndex * 200, 50, -500); 
+                tp = [slideIndex * 200, 50, 200];   
+                tl = [slideIndex * 200, 50, -500]; 
             } else if (destIndex === 2) {
-                // Resume Breakdown Matrix - has 9 slides (index 0 to 8)
-                targetPos.current.set(300 + (slideIndex * 350), -100 - (slideIndex * 100), -300 - (slideIndex * 250)); 
-                targetLookAt.current.set(0, (slideIndex * -80), 0);
+                tp = [300 + (slideIndex * 350), -100 - (slideIndex * 100), -300 - (slideIndex * 250)]; 
+                tl = [0, (slideIndex * -80), 0];
             } else if (destIndex === 3) {
-                targetPos.current.set(-500, 200, -100); // Deep core room
-                targetLookAt.current.set(-500, 200, -200);
+                tp = [-500, 200, -100];
+                tl = [-500, 200, -200];
             } else if (destIndex === 4) {
-                targetPos.current.set(500, 150, -100); // Dynamic Thread Allocator Node
-                targetLookAt.current.set(500, 100, -500);
+                tp = [500, 150, -100];
+                tl = [500, 100, -500];
             } else if (destIndex === 5) {
-                targetPos.current.set(0, -100, 0); // Matrix Nexus (Underworld)
-                targetLookAt.current.set(0, -100, -500);
+                tp = [0, -100, 0];
+                tl = [0, -100, -500];
             } else if (destIndex === 6) {
-                targetPos.current.set(200, 300, 400); // Overview Deck
-                targetLookAt.current.set(0, 0, 0);
+                tp = [200, 300, 400];
+                tl = [0, 0, 0];
             } else if (destIndex >= 7) {
-                targetPos.current.set(0, 0, 800); // Data Ingestion Hub
-                targetLookAt.current.set(0, 0, 0);
+                tp = [0, 0, 800];
+                tl = [0, 0, 0];
             }
+
+            panningWorkerRef.current?.postMessage({
+                type: 'SET_TARGET',
+                targetPos: tp,
+                targetLookAt: tl
+            });
         };
 
         window.addEventListener('fullpage-room-change', onRoomChange);
@@ -80,40 +107,46 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
     }, [camera]);
 
     useFrame((state, delta) => {
-        // Prevent huge delta spikes on tab switch or heavy load
-        const dt = Math.min(delta, 0.1);
-        
-        // High-performance smooth transitions between rooms using improved lerp based on damped exponential
-        // Lerping purely with a constant multiplier * delta can be jittery, we'll use a better smoothing function based on 1 - exp(-speed * dt)
-        const lerpFactor = 1 - Math.exp(-4 * dt);
-        camera.position.lerp(targetPos.current, lerpFactor);
-        currentLookAt.current.lerp(targetLookAt.current, lerpFactor);
-        camera.lookAt(currentLookAt.current);
+        // Send a tick to the worker to calculate next frame panning positions
+        panningWorkerRef.current?.postMessage({
+            type: 'TICK',
+            delta: delta
+        });
+
+        // Main thread only applies the calculated transformations (offloaded panning)
+        camera.position.copy(workerCameraPos.current);
+        camera.lookAt(workerLookAt.current);
 
         if (pointCloudRef.current) {
-            // Subtle ambient holographic fluctuation using proper time delta
-            pointCloudRef.current.rotation.y += dt * 0.05;
+            pointCloudRef.current.rotation.y += delta * 0.05;
             const mat = pointCloudRef.current.material as THREE.PointsMaterial;
             mat.opacity = 0.7 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
         }
     });
 
-    // Compilation Phase (Optimized)
-    let massiveConcatenatedVerticesCount = 0;
-    
-    aggregatedParallelDataChunksMatrix.forEach(isolatedChunkMatrixData => {
-        massiveConcatenatedVerticesCount += isolatedChunkMatrixData.verticesFloat32Array.length;
-    });
+    // Compilation Phase (Optimized with useMemo to prevent per-frame jitter)
+    const { monolithicVertexFloatBuffer, monolithicColorFloatBuffer, massiveConcatenatedVerticesCount } = React.useMemo(() => {
+        let count = 0;
+        aggregatedParallelDataChunksMatrix.forEach(isolatedChunkMatrixData => {
+            count += isolatedChunkMatrixData.verticesFloat32Array.length;
+        });
 
-    const monolithicVertexFloatBuffer = new Float32Array(massiveConcatenatedVerticesCount);
-    const monolithicColorFloatBuffer = new Float32Array(massiveConcatenatedVerticesCount);
+        const vertexBuffer = new Float32Array(count);
+        const colorBuffer = new Float32Array(count);
 
-    let offsetTrackingIndexPointer = 0;
-    for (const chunkMatrixInformation of aggregatedParallelDataChunksMatrix) {
-        monolithicVertexFloatBuffer.set(chunkMatrixInformation.verticesFloat32Array, offsetTrackingIndexPointer);
-        monolithicColorFloatBuffer.set(chunkMatrixInformation.colorsFloat32Array, offsetTrackingIndexPointer);
-        offsetTrackingIndexPointer += chunkMatrixInformation.verticesFloat32Array.length;
-    }
+        let offset = 0;
+        for (const chunk of aggregatedParallelDataChunksMatrix) {
+            vertexBuffer.set(chunk.verticesFloat32Array, offset);
+            colorBuffer.set(chunk.colorsFloat32Array, offset);
+            offset += chunk.verticesFloat32Array.length;
+        }
+
+        return {
+            monolithicVertexFloatBuffer: vertexBuffer,
+            monolithicColorFloatBuffer: colorBuffer,
+            massiveConcatenatedVerticesCount: count
+        };
+    }, [aggregatedParallelDataChunksMatrix]);
 
     return (
         <group>
@@ -148,4 +181,4 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = ({
             <SocialIcons3D />
         </group>
     );
-};
+});
