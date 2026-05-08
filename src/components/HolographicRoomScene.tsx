@@ -1,20 +1,53 @@
+import { ParticleWall } from './ParticleWall';
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { AutomatedMemoryCleaner } from '../lib/AutomatedMemoryCleaner';
 
 import { SocialIcons3D } from './SocialIcons3D';
-import { FloatingSpheres } from './FloatingSpheres';
+import { HugeParticleOrb } from './HugeParticleOrb';
 import { workerCode } from '../workers/PanningWorker';
 
 interface HolographicRoomSceneProperties {
     aggregatedParallelDataChunksMatrix: any[];
+    sandboxDensity?: number;
+    sandboxOrbScale?: number;
+    sandboxWallScale?: number;
+    wallsConfig?: any[];
+    orbPositions?: [number, number, number][];
+    activeRoomIndex?: number;
+    selectedElementId?: string;
+    onElementPositionChange?: (id: string, pos: [number, number, number]) => void;
+    onElementSelect?: (id: string) => void;
 }
 
 export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = React.memo(({
-    aggregatedParallelDataChunksMatrix
+    aggregatedParallelDataChunksMatrix,
+    sandboxDensity = 100,
+    sandboxOrbScale = 1,
+    sandboxWallScale = 1,
+    wallsConfig = [],
+    orbPositions,
+    activeRoomIndex = 0,
+    selectedElementId = "",
+    onElementPositionChange,
+    onElementSelect
 }) => {
     const { camera, gl } = useThree();
+    
+    const [isListening, setIsListening] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+
+    useEffect(() => {
+        const handleListening = (e: any) => setIsListening(e.detail);
+        const handleSpeaking = (e: any) => setIsSpeaking(e.detail);
+        window.addEventListener('chatbot-listening', handleListening);
+        window.addEventListener('chatbot-speaking', handleSpeaking);
+        return () => {
+            window.removeEventListener('chatbot-listening', handleListening);
+            window.removeEventListener('chatbot-speaking', handleSpeaking);
+        };
+    }, []);
     
     // Memory Optimization: Register webgl cleanup
     useEffect(() => {
@@ -76,26 +109,33 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                 tp = [0, 50, 600];
                 tl = [0, 50, 0];
             } else if (destIndex === 1) { // ChatBot
-                tp = [-150, 100, 300];
-                tl = [-150, 50, -100];
-            } else if (destIndex === 2) { // Video
-                tp = [slideIndex * 200, 50, 200];   
-                tl = [slideIndex * 200, 50, -500]; 
-            } else if (destIndex === 3) { // Infrastructure Explanation
-                tp = [-500, 200, -100];
-                tl = [-500, 200, -200];
-            } else if (destIndex === 4) { // Resume
-                tp = [300 + (slideIndex * 350), -100 - (slideIndex * 100), -300 - (slideIndex * 250)]; 
-                tl = [0, (slideIndex * -80), 0];
-            } else if (destIndex === 5) { // Dynamic Thread
-                tp = [500, 150, -100];
-                tl = [500, 100, -500];
-            } else if (destIndex === 6) { // Nexus
-                tp = [0, -100, 0];
-                tl = [0, -100, -500];
-            } else if (destIndex >= 7) { // End hub
-                tp = [200, 300, 400]; 
-                tl = [0, 0, 0];
+                tp = [-150, 50, 400];
+                tl = [-150, 50, 0];
+            } else if (destIndex === 2) { // Particle Sandbox
+                // Moved further back so we can see the cloud and all orbs
+                tp = [0, 800, 2500]; 
+                tl = [0, 100, 0];
+            } else if (destIndex === 3) { // Video
+                tp = [200 + (slideIndex * 50), 50, 400];   
+                tl = [200 + (slideIndex * 50), 50, 0]; 
+            } else if (destIndex === 4) { // Architecture
+                tp = [400, 50, 450];
+                tl = [400, 50, -50];
+            } else if (destIndex === 5) { // Resume
+                tp = [-400, 50, 450]; 
+                tl = [-400, 50, -50];
+            } else if (destIndex === 6) { // Dynamic Thread
+                tp = [600, 50, 500];
+                tl = [600, 50, -100];
+            } else if (destIndex === 7) { // Nexus
+                tp = [-600 + (slideIndex * 100), 50, 500];
+                tl = [-600 + (slideIndex * 100), 50, -100];
+            } else if (destIndex === 8) { // Global Canvas Delegation
+                tp = [800, 50, 600]; 
+                tl = [800, 50, -150];
+            } else if (destIndex >= 9) { // Data Ingestion
+                tp = [-800, 50, 600]; 
+                tl = [-800, 50, -150];
             }
 
             baseTp = [...tp];
@@ -167,11 +207,7 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
         camera.position.copy(workerCameraPos.current);
         camera.lookAt(workerLookAt.current);
 
-        if (pointCloudRef.current) {
-            pointCloudRef.current.rotation.y += delta * 0.05;
-            const mat = pointCloudRef.current.material as THREE.PointsMaterial;
-            mat.opacity = 0.7 + Math.sin(state.clock.elapsedTime * 2) * 0.1;
-        }
+        // removed legacy pointCloud rotation logic
     });
 
     // Compilation Phase (Optimized with useMemo to prevent per-frame jitter)
@@ -198,37 +234,119 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
         };
     }, [aggregatedParallelDataChunksMatrix]);
 
+    // removed legacy useEffect for single wall
+
+    const [isPlacing, setIsPlacing] = useState(false);
+
+    const handleElementClick = (id: string) => {
+        if (activeRoomIndex !== 2) return;
+        if (selectedElementId === id) {
+            setIsPlacing((prev) => !prev);
+        } else {
+            if (onElementSelect) onElementSelect(id);
+            setIsPlacing(true);
+        }
+    };
+
+    const handlePlanePointerMove = (e: any) => {
+        if (activeRoomIndex !== 2 || !isPlacing || !selectedElementId || !onElementPositionChange) return;
+        
+        let currentY = 50;
+        if (selectedElementId.startsWith("orb") && orbPositions) {
+            const idxStr = selectedElementId.replace("orb_", "");
+            const idx = parseInt(idxStr, 10);
+            if (!isNaN(idx) && orbPositions[idx]) {
+                currentY = orbPositions[idx][1];
+            }
+        } else if (selectedElementId.startsWith("wall")) {
+            const wall = wallsConfig.find(w => w.id === selectedElementId);
+            if (wall) {
+                currentY = wall.position[1];
+            }
+        }
+
+        if (e.point) {
+            onElementPositionChange(selectedElementId, [e.point.x, currentY, e.point.z]);
+        }
+    };
+
+    const handlePlaneClick = (e: any) => {
+        if (activeRoomIndex !== 2 || !isPlacing || !selectedElementId || !onElementPositionChange) return;
+        
+        let currentY = 50;
+        if (selectedElementId.startsWith("orb") && orbPositions) {
+            const idxStr = selectedElementId.replace("orb_", "");
+            const idx = parseInt(idxStr, 10);
+            if (!isNaN(idx) && orbPositions[idx]) {
+                currentY = orbPositions[idx][1];
+            }
+        } else if (selectedElementId.startsWith("wall")) {
+            const wall = wallsConfig.find(w => w.id === selectedElementId);
+            if (wall) {
+                currentY = wall.position[1];
+            }
+        }
+
+        if (e.point) {
+            onElementPositionChange(selectedElementId, [e.point.x, currentY, e.point.z]);
+            setIsPlacing(false);
+            e.stopPropagation();
+        }
+    };
+    
+    // ... Inside the render block, find <points ref={pointCloudRef}> and wrap it with <group>
+    // Wait, let's just replace the orbs block
+    
     return (
         <group>
             <ambientLight intensity={1.5} />
             <directionalLight position={[10, 20, 10]} intensity={2} />
-            <points ref={pointCloudRef}>
-                <bufferGeometry>
-                    <bufferAttribute
-                        attach="attributes-position"
-                        count={massiveConcatenatedVerticesCount / 3}
-                        array={monolithicVertexFloatBuffer}
-                        itemSize={3}
-                    />
-                    <bufferAttribute
-                        attach="attributes-color"
-                        count={massiveConcatenatedVerticesCount / 3}
-                        array={monolithicColorFloatBuffer}
-                        itemSize={3}
-                    />
-                </bufferGeometry>
-                {/* Tron-style AdditiveBlending Material optimized for 70 fps */}
-                <pointsMaterial
-                    size={0.15}
-                    vertexColors={true}
-                    transparent={true}
-                    opacity={0.9}
-                    blending={THREE.AdditiveBlending}
-                    depthWrite={false}
-                    sizeAttenuation={true}
+            
+            {/* Background Plane for Dragging Interaction */
+             activeRoomIndex === 2 && (
+                <mesh 
+                    position={[0, 50, 0]} 
+                    rotation={[-Math.PI / 2, 0, 0]} 
+                    onPointerMove={handlePlanePointerMove} 
+                    onClick={handlePlaneClick}
+                >
+                    <planeGeometry args={[10000, 10000]} />
+                    <meshBasicMaterial transparent opacity={0.0} colorWrite={false} depthWrite={false} />
+                </mesh>
+            )}
+
+            {wallsConfig.map((wall) => (
+                <ParticleWall 
+                    key={wall.id}
+                    position={wall.position}
+                    scale={wall.scale}
+                    baseScale={sandboxWallScale}
+                    density={sandboxDensity}
+                    monolithicVertexFloatBuffer={monolithicVertexFloatBuffer}
+                    monolithicColorFloatBuffer={monolithicColorFloatBuffer}
+                    massiveConcatenatedVerticesCount={massiveConcatenatedVerticesCount}
+                    isHighlighted={selectedElementId === wall.id}
+                    onClick={() => handleElementClick(wall.id)}
                 />
-            </points>
-            <FloatingSpheres />
+            ))}
+            
+            {orbPositions && orbPositions.map((pos, index) => {
+                const isCyan = index === 0 || index === 2 || index === 3 || index === 5 || index === 6 || index === 7 || index >= 9;
+                const scale = index === 1 || index === 5 ? 1.5 : (index === 2 ? 2.5 : (index === 8 ? 1.8 : (index === 3 || index === 6 ? 1.2 : 1.0)));
+                return (
+                    <HugeParticleOrb 
+                        key={index}
+                        position={pos}
+                        isListening={index === 1 ? isListening : false}
+                        isSpeaking={index === 1 ? isSpeaking : false}
+                        isCyanDominant={isCyan}
+                        offsetScale={scale * sandboxOrbScale}
+                        onClick={() => handleElementClick(`orb_${index}`)}
+                        isHighlighted={selectedElementId === `orb_${index}`}
+                    />
+                );
+            })}
+
             <SocialIcons3D />
         </group>
     );

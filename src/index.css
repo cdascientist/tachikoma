@@ -102,6 +102,11 @@ body {
   background: rgba(0, 255, 255, 0.5);
 }
 
+.mask-image-fade {
+  mask-image: linear-gradient(to bottom, transparent, black 20%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%);
+}
+
 #fp-nav ul li a span, .fp-slidesNav ul li a span {
     background: var(--neon-cyan) !important;
     box-shadow: 0 0 10px var(--neon-cyan);

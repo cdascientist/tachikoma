@@ -37,6 +37,139 @@ export const ParallelDataOrchestrator: React.FC = () => {
   >([]);
   const [operationalCount, setOperationalCount] = useState<number>(0);
   const [dynamicWorkersSpawned, setDynamicWorkersSpawned] = useState<number>(0);
+
+  // Sandbox Controls
+  const [sandboxDensity, setSandboxDensity] = useState<number>(100);
+  const [sandboxOrbScale, setSandboxOrbScale] = useState<number>(1);
+  const [sandboxWallScale, setSandboxWallScale] = useState<number>(1);
+
+  const initialWalls: { id: string; label: string; position: [number, number, number]; scale: number }[] = [
+    { id: "wall_0", label: "Wall 0: Base", position: [0, 0, 0], scale: 1 }
+  ];
+  const [wallsConfig, setWallsConfig] = useState(initialWalls);
+
+  const initialOrbs: { id: string; label: string; position: [number, number, number] }[] = [
+    { id: "orb_0", label: "Orb 0: Landing", position: [0, 50, 0] },
+    { id: "orb_1", label: "Orb 1: Chatbot", position: [-150, 50, -50] },
+    { id: "orb_2", label: "Orb 2: Particle Sandbox", position: [0, 200, -250] },
+    { id: "orb_3", label: "Orb 3: Video", position: [200, 50, -50] },
+    { id: "orb_4", label: "Orb 4: Architecture", position: [400, 50, -100] },
+    { id: "orb_5", label: "Orb 5: Resume", position: [-400, 50, -100] },
+    { id: "orb_6", label: "Orb 6: Dynamic Thread", position: [600, 50, -150] },
+    { id: "orb_7", label: "Orb 7: Nexus", position: [-600, 50, -150] },
+    { id: "orb_8", label: "Orb 8: Canvas Delegation", position: [800, 50, -200] },
+    { id: "orb_9", label: "Orb 9: Data Ingestion", position: [-800, 50, -200] }
+  ];
+  const [orbsConfig, setOrbsConfig] = useState(initialOrbs);
+  const [selectedElementId, setSelectedElementId] = useState<string>("wall_0");
+  const [isSandboxMenuMinimized, setIsSandboxMenuMinimized] = useState<boolean>(false);
+  const [isSandboxMenuHovered, setIsSandboxMenuHovered] = useState<boolean>(false);
+  const [activeRoomIndex, setActiveRoomIndex] = useState<number>(0);
+
+  const orbPositions = orbsConfig.map(o => o.position);
+  const wallPositions = wallsConfig.map(w => w.position);
+
+  const updateOrbPosition = (id: string, axis: 0 | 1 | 2, value: number) => {
+    setOrbsConfig((prev) => prev.map(o => o.id === id ? { ...o, position: Object.assign([...o.position], { [axis]: value }) } as typeof o : o));
+  };
+
+  const updateWallPosition = (id: string, axis: 0 | 1 | 2, value: number) => {
+    setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, position: Object.assign([...w.position], { [axis]: value }) } as typeof w : w));
+  };
+
+  const handleElementPositionChange = (id: string, position: [number, number, number]) => {
+    if (id.startsWith("orb_")) {
+      setOrbsConfig((prev) => prev.map(o => o.id === id ? { ...o, position } : o));
+    } else if (id.startsWith("wall_")) {
+      setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, position } : w));
+    }
+    setSelectedElementId(id);
+  };
+
+  const addNewOrb = () => {
+    setOrbsConfig((prev) => [
+      ...prev,
+      {
+        id: `orb_${Date.now()}`,
+        label: `Custom Orb ${prev.length}`,
+        position: [
+          Math.floor(Math.random() * 400 - 200),
+          Math.floor(Math.random() * 200),
+          Math.floor(Math.random() * 400 - 200)
+        ]
+      }
+    ]);
+  };
+
+  const addNewWall = () => {
+    setWallsConfig((prev) => [
+      ...prev,
+      {
+        id: `wall_${Date.now()}`,
+        label: `Custom Wall ${prev.length}`,
+        position: [
+          Math.floor(Math.random() * 400 - 200),
+          Math.floor(Math.random() * 200),
+          Math.floor(Math.random() * 400 - 200)
+        ],
+        scale: 1
+      }
+    ]);
+  };
+
+  const duplicateSelectedElement = () => {
+    if (selectedElementId.startsWith("wall")) {
+      const original = wallsConfig.find(w => w.id === selectedElementId);
+      if (original) {
+        setWallsConfig(prev => [
+          ...prev,
+          {
+            ...original,
+            id: `wall_${Date.now()}`,
+            label: `${original.label} (Copy)`,
+            position: [original.position[0] + 50, original.position[1], original.position[2] + 50]
+          }
+        ]);
+      }
+    } else if (selectedElementId.startsWith("orb")) {
+      const original = orbsConfig.find(o => o.id === selectedElementId);
+      if (original) {
+        setOrbsConfig(prev => [
+          ...prev,
+          {
+            ...original,
+            id: `orb_${Date.now()}`,
+            label: `${original.label} (Copy)`,
+            position: [original.position[0] + 50, original.position[1], original.position[2] + 50]
+          }
+        ]);
+      }
+    }
+  };
+
+  const updateWallScale = (id: string, scale: number) => {
+    setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, scale } : w));
+  };
+
+  const saveConfigToFile = () => {
+    const configData = {
+      sandboxDensity,
+      sandboxOrbScale,
+      sandboxWallScale,
+      walls: wallsConfig,
+      orbs: orbsConfig
+    };
+    const blob = new Blob([JSON.stringify(configData, null, 2)], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "particle_sandbox_config.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const fullpageContainerRef = useRef<HTMLDivElement>(null);
   const fpInitializedRef = useRef<boolean>(false);
 
@@ -124,23 +257,36 @@ export const ParallelDataOrchestrator: React.FC = () => {
           let x, y, z;
           const seed = Math.random();
 
-          if (seed < 0.33) {
-            x = (Math.random() - 0.5) * 6000;
-            y = -50 + Math.sin(contiguousVertexIndex) * 20;
-            z = (Math.random() - 0.5) * 6000;
-          } else if (seed < 0.66) {
-            x =
-              (Math.random() > 0.5 ? 1 : -1) * 2000 +
-              (Math.random() - 0.5) * 200;
-            y = (Math.random() - 0.5) * 2000;
-            z = (Math.random() - 0.5) * 6000;
+          if (seed < 0.20) {
+            // Floor
+            x = (Math.random() - 0.5) * 16000;
+            y = -4000 + (Math.random() - 0.5) * 200;
+            z = (Math.random() - 0.5) * 16000;
+          } else if (seed < 0.40) {
+            // Ceiling
+            x = (Math.random() - 0.5) * 16000;
+            y = 4000 + (Math.random() - 0.5) * 200;
+            z = (Math.random() - 0.5) * 16000;
+          } else if (seed < 0.55) {
+            // Left Wall
+            x = -8000 + (Math.random() - 0.5) * 200;
+            y = (Math.random() - 0.5) * 8000;
+            z = (Math.random() - 0.5) * 16000;
+          } else if (seed < 0.70) {
+            // Right Wall
+            x = 8000 + (Math.random() - 0.5) * 200;
+            y = (Math.random() - 0.5) * 8000;
+            z = (Math.random() - 0.5) * 16000;
+          } else if (seed < 0.85) {
+            // Front Wall
+            x = (Math.random() - 0.5) * 16000;
+            y = (Math.random() - 0.5) * 8000;
+            z = -8000 + (Math.random() - 0.5) * 200;
           } else {
-            const r = 1000 * Math.cbrt(Math.random());
-            const theta = Math.random() * 2 * Math.PI;
-            const phi = Math.acos(2 * Math.random() - 1);
-            x = -500 + r * Math.sin(phi) * Math.cos(theta);
-            y = 200 + r * Math.sin(phi) * Math.sin(theta);
-            z = -200 + r * Math.cos(phi);
+            // Back Wall
+            x = (Math.random() - 0.5) * 16000;
+            y = (Math.random() - 0.5) * 8000;
+            z = 8000 + (Math.random() - 0.5) * 200;
           }
 
           verticesArray[idx] = x;
@@ -228,6 +374,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
           // Disable fullpage's native touch scrolling to use our Hammer implementation
           touchSensitivity: 10000, // Make it practically impossible to trigger native fullpage touch
           onLeave: (origin: any, destination: any, direction: string) => {
+            setActiveRoomIndex(destination.index);
             window.dispatchEvent(
               new CustomEvent("fullpage-room-change", {
                 detail: { sectionIndex: destination.index, slideIndex: 0 },
@@ -240,6 +387,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
             destination: any,
             direction: string,
           ) => {
+            setActiveRoomIndex(section.index);
             window.dispatchEvent(
               new CustomEvent("fullpage-room-change", {
                 detail: {
@@ -472,6 +620,15 @@ export const ParallelDataOrchestrator: React.FC = () => {
               <ambientLight intensity={0.5} />
               <HolographicRoomScene
                 aggregatedParallelDataChunksMatrix={aggregatedDataChunkVault}
+                sandboxDensity={sandboxDensity}
+                sandboxOrbScale={sandboxOrbScale}
+                sandboxWallScale={sandboxWallScale}
+                wallsConfig={wallsConfig}
+                orbPositions={orbPositions}
+                activeRoomIndex={activeRoomIndex}
+                selectedElementId={selectedElementId}
+                onElementPositionChange={handleElementPositionChange}
+                onElementSelect={setSelectedElementId}
               />
             </Canvas>
           </div>
@@ -517,7 +674,146 @@ export const ParallelDataOrchestrator: React.FC = () => {
               <ChatBotInterface />
             </div>
 
-            {/* ROOM 2: Horizontal Video Flow */}
+            {/* ROOM 2: Particle Sandbox */}
+            <div className="section transparent-section">
+              <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 select-none max-w-4xl mx-auto">
+                <div 
+                  className={`backdrop-blur-xl bg-black/50 border border-fuchsia-500/30 p-6 md:p-10 rounded-3xl w-full pointer-events-auto shadow-[0_0_30px_rgba(255,0,255,0.1)] transition-all duration-500 ${!isSandboxMenuHovered ? 'opacity-40 hover:opacity-100' : 'opacity-100'}`}
+                  onMouseEnter={() => setIsSandboxMenuHovered(true)}
+                  onMouseLeave={() => setIsSandboxMenuHovered(false)}
+                >
+                  <div className="flex justify-between items-center mb-6 border-b border-fuchsia-500/20 pb-4">
+                    <h2 className={`text-2xl sm:text-3xl md:text-4xl font-mono text-fuchsia-400 drop-shadow-[0_0_15px_#f0f] pointer-events-auto shrink-0 transition-opacity`}>
+                      PARTICLE_SANDBOX
+                    </h2>
+                    <button 
+                      onClick={() => setIsSandboxMenuMinimized(!isSandboxMenuMinimized)}
+                      className="text-fuchsia-300 hover:text-white p-2 px-4 border border-fuchsia-500/50 rounded-full bg-fuchsia-500/10 hover:bg-fuchsia-500/30 transition-colors font-mono text-xs uppercase tracking-widest"
+                    >
+                      {isSandboxMenuMinimized ? 'Maximize' : 'Minimize'}
+                    </button>
+                  </div>
+                  
+                  <div className={`transition-all duration-500 origin-top overflow-hidden max-h-[70vh] overflow-y-auto scrollable-content pr-2 custom-scrollbar ${isSandboxMenuMinimized ? 'h-0 opacity-0' : 'h-auto opacity-100'}`}>
+                    <p className="text-fuchsia-200/80 font-mono text-base mb-8 text-center leading-relaxed">
+                      Customize global particle fields and orb configurations dynamically. 
+                      Experiment with layout variables to shape the 3D space.
+                    </p>
+                    <div className="flex flex-col gap-6">
+                       <div className="flex flex-col gap-2">
+                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider mb-1">
+                           Select Element to Position
+                         </label>
+                         <select 
+                           className="bg-black/60 border border-fuchsia-400/50 text-fuchsia-300 p-3 rounded-xl font-mono text-base focus:outline-none focus:border-fuchsia-400"
+                           value={selectedElementId}
+                           onChange={(e) => setSelectedElementId(e.target.value)}
+                         >
+                           <optgroup label="Walls">
+                             {wallsConfig.map((wall) => (
+                               <option key={wall.id} value={wall.id}>{wall.label}</option>
+                             ))}
+                           </optgroup>
+                           <optgroup label="Orbs">
+                             {orbsConfig.map((orb) => (
+                               <option key={orb.id} value={orb.id}>{orb.label}</option>
+                             ))}
+                           </optgroup>
+                         </select>
+                       </div>
+
+                       <div className="flex gap-4">
+                         <button onClick={addNewWall} className="flex-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
+                           Add New Wall
+                         </button>
+                         <button onClick={addNewOrb} className="flex-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-300 border border-fuchsia-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
+                           Add New Orb
+                         </button>
+                         <button onClick={duplicateSelectedElement} className="flex-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-300 border border-fuchsia-500/50 py-2 rounded-xl font-mono text-xs uppercase tracking-wider transition-colors">Copy</button>
+                          <button onClick={saveConfigToFile} className="flex-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
+                           Save Config
+                         </button>
+                       </div>
+
+                       <div className="px-4 py-6 border border-fuchsia-500/20 rounded-2xl bg-black/40 flex flex-col gap-4">
+                         <h3 className="text-fuchsia-400 font-mono text-lg mb-2">
+                           {selectedElementId.startsWith('wall') ? 'Wall Controls' : 'Orb Controls'}
+                         </h3>
+                         {(() => {
+                           const isWall = selectedElementId.startsWith("wall");
+                           const targetList = isWall ? wallsConfig : orbsConfig;
+                           const targetItem = targetList.find(x => x.id === selectedElementId);
+                           const updatePos = isWall ? updateWallPosition : updateOrbPosition;
+
+                           if (!targetItem) return null;
+                           return (
+                             <>
+                               <div className="flex flex-col gap-2">
+                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                                   <span>Position X</span>
+                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[0])} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
+                                 </label>
+                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[0]} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
+                               </div>
+                               <div className="flex flex-col gap-2">
+                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                                   <span>Position Y</span>
+                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[1])} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
+                                 </label>
+                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[1]} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
+                               </div>
+                               <div className="flex flex-col gap-2">
+                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                                   <span>Position Z</span>
+                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[2])} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
+                                 </label>
+                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[2]} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
+                               </div>
+                               {isWall && 'scale' in targetItem && (
+                                 <div className="flex flex-col gap-2">
+                                   <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                                     <span>Scale</span>
+                                     <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Number(targetItem.scale.toFixed(2))} onChange={(e) => updateWallScale(targetItem.id, Number(e.target.value))} />
+                                   </label>
+                                   <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.1" max="10" step="0.1" value={targetItem.scale} onChange={(e) => updateWallScale(targetItem.id, Number(e.target.value))} />
+                                 </div>
+                               )}
+                             </>
+                           );
+                         })()}
+
+                       </div>
+
+                       <div className="h-px w-full bg-fuchsia-500/20 my-2"></div>
+
+                       <div className="flex flex-col gap-2">
+                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                           <span>Particle Density %</span>
+                           <span className="text-fuchsia-500">{sandboxDensity}%</span>
+                         </label>
+                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="10" max="200" value={sandboxDensity} onChange={(e) => setSandboxDensity(Number(e.target.value))} />
+                       </div>
+                       <div className="flex flex-col gap-2">
+                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                           <span>Global Orb Scale</span>
+                           <span className="text-fuchsia-500">{sandboxOrbScale.toFixed(1)}x</span>
+                         </label>
+                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.5" max="3" step="0.1" value={sandboxOrbScale} onChange={(e) => setSandboxOrbScale(Number(e.target.value))} />
+                       </div>
+                       <div className="flex flex-col gap-2">
+                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
+                           <span>Cloud Expansion</span>
+                           <span className="text-fuchsia-500">{sandboxWallScale.toFixed(1)}x</span>
+                         </label>
+                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.5" max="5" step="0.1" value={sandboxWallScale} onChange={(e) => setSandboxWallScale(Number(e.target.value))} />
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ROOM 3: Horizontal Video Flow */}
             <div className="section transparent-section relative">
               {/* Custom Glowing Navigation Particles */}
               <button
@@ -853,7 +1149,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
               </div>
             </div>
 
-            {/* ROOM 7: Payload Integration */}
+            {/* ROOM 8: Payload Integration */}
             <div className="section transparent-section fp-auto-height">
               <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 select-none py-20 min-h-screen">
                 <h2 className="text-3xl sm:text-4xl md:text-5xl font-mono text-cyan-400 mb-6 drop-shadow-[0_0_15px_#0ff] pointer-events-auto break-words w-full text-center shrink-0">
@@ -865,6 +1161,8 @@ export const ParallelDataOrchestrator: React.FC = () => {
                 </div>
               </div>
             </div>
+
+
           </div>
         </div>
       )}
