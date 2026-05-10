@@ -6,7 +6,7 @@ import { AutomatedMemoryCleaner } from '../lib/AutomatedMemoryCleaner';
 
 import { SocialIcons3D } from './SocialIcons3D';
 import { HugeParticleOrb } from './HugeParticleOrb';
-import { workerCode } from '../workers/PanningWorker';
+import { positionWorkerCode, lookAtWorkerCode } from '../workers/PanningWorker';
 
 interface HolographicRoomSceneProperties {
     aggregatedParallelDataChunksMatrix: any[];
@@ -14,6 +14,7 @@ interface HolographicRoomSceneProperties {
     sandboxOrbScale?: number;
     sandboxWallScale?: number;
     wallsConfig?: any[];
+    planesConfig?: any[];
     orbPositions?: [number, number, number][];
     activeRoomIndex?: number;
     selectedElementId?: string;
@@ -27,6 +28,7 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
     sandboxOrbScale = 1,
     sandboxWallScale = 1,
     wallsConfig = [],
+    planesConfig = [],
     orbPositions,
     activeRoomIndex = 0,
     selectedElementId = "",
@@ -58,29 +60,18 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
         });
     }, [gl]);
 
-    // Use Web Workers for purely offloaded high-performance camera panning and interpolations
-    const panningWorkerRef = useRef<Worker | null>(null);
-    const workerCameraPos = useRef(new THREE.Vector3(0, 50, 600));
-    const workerLookAt = useRef(new THREE.Vector3(0, 50, 0));
+    // Smooth main-thread camera pan state
+    const targetCameraPos = useRef(new THREE.Vector3(0, 50, 600));
+    const targetLookAt = useRef(new THREE.Vector3(0, 50, 0));
+    const currentLookAt = useRef(new THREE.Vector3(0, 50, 0));
 
-    useEffect(() => {
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        const worker = new Worker(url);
-        panningWorkerRef.current = worker;
-
-        worker.onmessage = (e) => {
-            if (e.data.type === 'TICK_RESULT') {
-                workerCameraPos.current.set(e.data.currentPos[0], e.data.currentPos[1], e.data.currentPos[2]);
-                workerLookAt.current.set(e.data.currentLookAt[0], e.data.currentLookAt[1], e.data.currentLookAt[2]);
-            }
-        };
-
-        return () => {
-             worker.terminate();
-             URL.revokeObjectURL(url);
-        };
-    }, []);
+    const posTrajectoryTime = useRef<number>(0);
+    const lookTrajectoryTime = useRef<number>(0);
+    const isWaitingForPosWorker = useRef<boolean>(false);
+    const isWaitingForLookWorker = useRef<boolean>(false);
+    
+    // Journey mode
+    const journeySequence = useRef<{pos: number[], look: number[]}[]>([]);
 
     const pointCloudRef = useRef<THREE.Points>(null);
 
@@ -109,43 +100,40 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                 tp = [0, 50, 600];
                 tl = [0, 50, 0];
             } else if (destIndex === 1) { // ChatBot
-                tp = [-150, 50, 400];
-                tl = [-150, 50, 0];
+                tp = [-300, 50, 400];
+                tl = [-300, 50, -50];
             } else if (destIndex === 2) { // Particle Sandbox
                 // Moved further back so we can see the cloud and all orbs
-                tp = [0, 800, 2500]; 
-                tl = [0, 100, 0];
+                tp = [0, 800, 1800]; 
+                tl = [0, 100, -200];
             } else if (destIndex === 3) { // Video
-                tp = [200 + (slideIndex * 50), 50, 400];   
-                tl = [200 + (slideIndex * 50), 50, 0]; 
+                tp = [300 + (slideIndex * 50), 50, 400];   
+                tl = [300 + (slideIndex * 50), 50, -50]; 
             } else if (destIndex === 4) { // Architecture
-                tp = [400, 50, 450];
-                tl = [400, 50, -50];
-            } else if (destIndex === 5) { // Resume
-                tp = [-400, 50, 450]; 
-                tl = [-400, 50, -50];
-            } else if (destIndex === 6) { // Dynamic Thread
-                tp = [600, 50, 500];
+                tp = [600, 50, 450];
                 tl = [600, 50, -100];
+            } else if (destIndex === 5) { // Resume
+                tp = [-600, 50, 450]; 
+                tl = [-600, 50, -100];
+            } else if (destIndex === 6) { // Dynamic Thread
+                tp = [900, 50, 500];
+                tl = [900, 50, -150];
             } else if (destIndex === 7) { // Nexus
-                tp = [-600 + (slideIndex * 100), 50, 500];
-                tl = [-600 + (slideIndex * 100), 50, -100];
+                tp = [-900 + (slideIndex * 100), 50, 500];
+                tl = [-900 + (slideIndex * 100), 50, -150];
             } else if (destIndex === 8) { // Global Canvas Delegation
-                tp = [800, 50, 600]; 
-                tl = [800, 50, -150];
+                tp = [1200, 50, 600]; 
+                tl = [1200, 50, -200];
             } else if (destIndex >= 9) { // Data Ingestion
-                tp = [-800, 50, 600]; 
-                tl = [-800, 50, -150];
+                tp = [-1200, 50, 600]; 
+                tl = [-1200, 50, -200];
             }
 
             baseTp = [...tp];
             baseTl = [...tl];
 
-            panningWorkerRef.current?.postMessage({
-                type: 'SET_TARGET',
-                targetPos: tp,
-                targetLookAt: tl
-            });
+            targetCameraPos.current.set(tp[0], tp[1], tp[2]);
+            targetLookAt.current.set(tl[0], tl[1], tl[2]);
         };
 
         const onPan = (e: any) => {
@@ -157,11 +145,8 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                 const newTp = [baseTp[0] - deltaX * panFactor, baseTp[1] + deltaY * panFactor, baseTp[2]];
                 const newTl = [baseTl[0] - deltaX * panFactor * 0.5, baseTl[1] + deltaY * panFactor * 0.5, baseTl[2]];
                 
-                panningWorkerRef.current?.postMessage({
-                    type: 'SET_TARGET',
-                    targetPos: newTp,
-                    targetLookAt: newTl
-                });
+                targetCameraPos.current.set(newTp[0], newTp[1], newTp[2]);
+                targetLookAt.current.set(newTl[0], newTl[1], newTl[2]);
 
                 if (type === 'panend' || type === 'panstart' && e.detail.isFinal) {
                     baseTp = [...newTp];
@@ -172,16 +157,18 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
 
         const onDoubleTap = (e: any) => {
             if (currentRoomDest === 0) {
-                // Zoom forward into the holographic space
-                const zoomFactor = 100;
-                baseTp[2] -= zoomFactor;
-                baseTl[2] -= zoomFactor;
+                // Initialize a flying journey around the orbs
+                journeySequence.current = [
+                    { pos: [-300, 50, 50], look: [-300, 50, -50] },       // Chatbot orb
+                    { pos: [0, 800, 1000], look: [0, 100, -200] },        // Sandbox orb
+                    { pos: [300, 50, 50], look: [300, 50, -50] },         // Video orb
+                    { pos: [600, 50, 0], look: [600, 50, -100] },         // Architecture
+                    { pos: [0, 50, 600], look: [0, 50, 0] }               // Back to home
+                ];
 
-                panningWorkerRef.current?.postMessage({
-                    type: 'SET_TARGET',
-                    targetPos: baseTp,
-                    targetLookAt: baseTl
-                });
+                const nextStop = journeySequence.current.shift()!;
+                targetCameraPos.current.set(nextStop.pos[0], nextStop.pos[1], nextStop.pos[2]);
+                targetLookAt.current.set(nextStop.look[0], nextStop.look[1], nextStop.look[2]);
             }
         };
 
@@ -197,17 +184,21 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
     }, [camera]);
 
     useFrame((state, delta) => {
-        // Send a tick to the worker to calculate next frame panning positions
-        panningWorkerRef.current?.postMessage({
-            type: 'TICK',
-            delta: delta
-        });
+        const safeDelta = Math.min(delta, 0.1);
+        const lerpFactor = 1 - Math.exp(-6 * safeDelta); 
 
-        // Main thread only applies the calculated transformations (offloaded panning)
-        camera.position.copy(workerCameraPos.current);
-        camera.lookAt(workerLookAt.current);
+        // If on a journey, queue the next point
+        if (journeySequence.current.length > 0) {
+            if (camera.position.distanceTo(targetCameraPos.current) < 50 && currentLookAt.current.distanceTo(targetLookAt.current) < 50) {
+                const nextStop = journeySequence.current.shift()!;
+                targetCameraPos.current.set(nextStop.pos[0], nextStop.pos[1], nextStop.pos[2]);
+                targetLookAt.current.set(nextStop.look[0], nextStop.look[1], nextStop.look[2]);
+            }
+        }
 
-        // removed legacy pointCloud rotation logic
+        camera.position.lerp(targetCameraPos.current, lerpFactor);
+        currentLookAt.current.lerp(targetLookAt.current, lerpFactor);
+        camera.lookAt(currentLookAt.current);
     });
 
     // Compilation Phase (Optimized with useMemo to prevent per-frame jitter)
@@ -263,6 +254,11 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
             if (wall) {
                 currentY = wall.position[1];
             }
+        } else if (selectedElementId.startsWith("plane")) {
+            const plane = planesConfig.find(p => p.id === selectedElementId);
+            if (plane) {
+                currentY = plane.position[1];
+            }
         }
 
         if (e.point) {
@@ -284,6 +280,11 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
             const wall = wallsConfig.find(w => w.id === selectedElementId);
             if (wall) {
                 currentY = wall.position[1];
+            }
+        } else if (selectedElementId.startsWith("plane")) {
+            const plane = planesConfig.find(p => p.id === selectedElementId);
+            if (plane) {
+                currentY = plane.position[1];
             }
         }
 
@@ -329,7 +330,28 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                     onClick={() => handleElementClick(wall.id)}
                 />
             ))}
-            
+
+            {planesConfig.map((plane) => (
+                <mesh 
+                    key={plane.id}
+                    position={plane.position}
+                    rotation={[-Math.PI / 2, 0, 0]}
+                    scale={[plane.scale, plane.scale, 1]}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleElementClick(plane.id);
+                    }}
+                >
+                    <planeGeometry args={[10, 10, 16, 16]} />
+                    <meshBasicMaterial 
+                        color={selectedElementId === plane.id ? "#ffffff" : "#f0f"} 
+                        wireframe 
+                        transparent 
+                        opacity={0.3} 
+                    />
+                </mesh>
+            ))}
+
             {orbPositions && orbPositions.map((pos, index) => {
                 const isCyan = index === 0 || index === 2 || index === 3 || index === 5 || index === 6 || index === 7 || index >= 9;
                 const scale = index === 1 || index === 5 ? 1.5 : (index === 2 ? 2.5 : (index === 8 ? 1.8 : (index === 3 || index === 6 ? 1.2 : 1.0)));

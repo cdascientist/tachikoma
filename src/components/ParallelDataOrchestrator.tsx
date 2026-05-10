@@ -24,7 +24,7 @@ export interface GeometryChunkDataPayload {
 
 // Drastically increase parallelism and adjust polygon density for mobile/desktop parity
 const PARALLEL_WORKER_THREAD_POOL_SIZE =
-  navigator.hardwareConcurrency * 8 || 48; // Significantly more workers
+  navigator.hardwareConcurrency * 16 || 128; // Even more workers to offset performance
 const BASE_POLYGON_MULTIPLIER = 1.1;
 
 export const ParallelDataOrchestrator: React.FC = () => {
@@ -39,28 +39,55 @@ export const ParallelDataOrchestrator: React.FC = () => {
   const [dynamicWorkersSpawned, setDynamicWorkersSpawned] = useState<number>(0);
 
   // Sandbox Controls
-  const [sandboxDensity, setSandboxDensity] = useState<number>(100);
-  const [sandboxOrbScale, setSandboxOrbScale] = useState<number>(1);
-  const [sandboxWallScale, setSandboxWallScale] = useState<number>(1);
+  const [sandboxDensity, setSandboxDensity] = useState<number>(() => {
+    const saved = localStorage.getItem('env_sandboxDensity'); return saved ? Number(saved) : 100;
+  });
+  const [sandboxOrbScale, setSandboxOrbScale] = useState<number>(() => {
+    const saved = localStorage.getItem('env_sandboxOrbScale'); return saved ? Number(saved) : 1;
+  });
+  const [sandboxWallScale, setSandboxWallScale] = useState<number>(() => {
+    const saved = localStorage.getItem('env_sandboxWallScale'); return saved ? Number(saved) : 1;
+  });
+
+  const initialPlanes: { id: string; label: string; position: [number, number, number]; scale: number }[] = [
+    { id: "plane_0", label: "Plane 0", position: [0, -500, 0], scale: 100 }
+  ];
+  const [planesConfig, setPlanesConfig] = useState(() => {
+    const saved = localStorage.getItem('env_planesConfig'); return saved ? JSON.parse(saved) : initialPlanes;
+  });
 
   const initialWalls: { id: string; label: string; position: [number, number, number]; scale: number }[] = [
     { id: "wall_0", label: "Wall 0: Base", position: [0, 0, 0], scale: 1 }
   ];
-  const [wallsConfig, setWallsConfig] = useState(initialWalls);
+  const [wallsConfig, setWallsConfig] = useState(() => {
+    const saved = localStorage.getItem('env_wallsConfig'); return saved ? JSON.parse(saved) : initialWalls;
+  });
 
   const initialOrbs: { id: string; label: string; position: [number, number, number] }[] = [
     { id: "orb_0", label: "Orb 0: Landing", position: [0, 50, 0] },
-    { id: "orb_1", label: "Orb 1: Chatbot", position: [-150, 50, -50] },
-    { id: "orb_2", label: "Orb 2: Particle Sandbox", position: [0, 200, -250] },
-    { id: "orb_3", label: "Orb 3: Video", position: [200, 50, -50] },
-    { id: "orb_4", label: "Orb 4: Architecture", position: [400, 50, -100] },
-    { id: "orb_5", label: "Orb 5: Resume", position: [-400, 50, -100] },
-    { id: "orb_6", label: "Orb 6: Dynamic Thread", position: [600, 50, -150] },
-    { id: "orb_7", label: "Orb 7: Nexus", position: [-600, 50, -150] },
-    { id: "orb_8", label: "Orb 8: Canvas Delegation", position: [800, 50, -200] },
-    { id: "orb_9", label: "Orb 9: Data Ingestion", position: [-800, 50, -200] }
+    { id: "orb_1", label: "Orb 1: Chatbot", position: [-300, 50, -50] },
+    { id: "orb_2", label: "Orb 2: Particle Sandbox", position: [0, 100, -200] },
+    { id: "orb_3", label: "Orb 3: Video", position: [300, 50, -50] },
+    { id: "orb_4", label: "Orb 4: Architecture", position: [600, 50, -100] },
+    { id: "orb_5", label: "Orb 5: Resume", position: [-600, 50, -100] },
+    { id: "orb_6", label: "Orb 6: Dynamic Thread", position: [900, 50, -150] },
+    { id: "orb_7", label: "Orb 7: Nexus", position: [-900, 50, -150] },
+    { id: "orb_8", label: "Orb 8: Canvas Delegation", position: [1200, 50, -200] },
+    { id: "orb_9", label: "Orb 9: Data Ingestion", position: [-1200, 50, -200] }
   ];
-  const [orbsConfig, setOrbsConfig] = useState(initialOrbs);
+  const [orbsConfig, setOrbsConfig] = useState(() => {
+    const saved = localStorage.getItem('env_orbsConfig'); return saved ? JSON.parse(saved) : initialOrbs;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('env_sandboxDensity', sandboxDensity.toString());
+    localStorage.setItem('env_sandboxOrbScale', sandboxOrbScale.toString());
+    localStorage.setItem('env_sandboxWallScale', sandboxWallScale.toString());
+    localStorage.setItem('env_planesConfig', JSON.stringify(planesConfig));
+    localStorage.setItem('env_wallsConfig', JSON.stringify(wallsConfig));
+    localStorage.setItem('env_orbsConfig', JSON.stringify(orbsConfig));
+  }, [sandboxDensity, sandboxOrbScale, sandboxWallScale, planesConfig, wallsConfig, orbsConfig]);
+
   const [selectedElementId, setSelectedElementId] = useState<string>("wall_0");
   const [isSandboxMenuMinimized, setIsSandboxMenuMinimized] = useState<boolean>(false);
   const [isSandboxMenuHovered, setIsSandboxMenuHovered] = useState<boolean>(false);
@@ -77,13 +104,31 @@ export const ParallelDataOrchestrator: React.FC = () => {
     setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, position: Object.assign([...w.position], { [axis]: value }) } as typeof w : w));
   };
 
+  const updatePlanePosition = (id: string, axis: 0 | 1 | 2, value: number) => {
+    setPlanesConfig((prev) => prev.map(p => p.id === id ? { ...p, position: Object.assign([...p.position], { [axis]: value }) } as typeof p : p));
+  };
+
   const handleElementPositionChange = (id: string, position: [number, number, number]) => {
     if (id.startsWith("orb_")) {
       setOrbsConfig((prev) => prev.map(o => o.id === id ? { ...o, position } : o));
     } else if (id.startsWith("wall_")) {
       setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, position } : w));
+    } else if (id.startsWith("plane_")) {
+      setPlanesConfig((prev) => prev.map(p => p.id === id ? { ...p, position } : p));
     }
     setSelectedElementId(id);
+  };
+
+  const addNewPlane = () => {
+    setPlanesConfig((prev) => [
+      ...prev,
+      {
+        id: `plane_${Date.now()}`,
+        label: `Custom Plane ${prev.length}`,
+        position: [0, -200, 0],
+        scale: 100
+      }
+    ]);
   };
 
   const addNewOrb = () => {
@@ -131,6 +176,19 @@ export const ParallelDataOrchestrator: React.FC = () => {
           }
         ]);
       }
+    } else if (selectedElementId.startsWith("plane")) {
+      const original = planesConfig.find(p => p.id === selectedElementId);
+      if (original) {
+        setPlanesConfig(prev => [
+          ...prev,
+          {
+            ...original,
+            id: `plane_${Date.now()}`,
+            label: `${original.label} (Copy)`,
+            position: [original.position[0] + 50, original.position[1], original.position[2] + 50]
+          }
+        ]);
+      }
     } else if (selectedElementId.startsWith("orb")) {
       const original = orbsConfig.find(o => o.id === selectedElementId);
       if (original) {
@@ -149,6 +207,10 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
   const updateWallScale = (id: string, scale: number) => {
     setWallsConfig((prev) => prev.map(w => w.id === id ? { ...w, scale } : w));
+  };
+
+  const updatePlaneScale = (id: string, scale: number) => {
+    setPlanesConfig((prev) => prev.map(p => p.id === id ? { ...p, scale } : p));
   };
 
   const saveConfigToFile = () => {
@@ -239,7 +301,8 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
       const generateChunkParallel = (chunkIndex: number) => {
         // Chunk size optimized and compressed (reduced by 30% for load time & render improvements)
-        const totalVerticesCountForThisSpecificChunk = 175000 / 4;
+        const workerPoolSize = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency * 16 : 128;
+        const totalVerticesCountForThisSpecificChunk = Math.floor(250000 / workerPoolSize);
 
         const verticesArray = new Float32Array(
           totalVerticesCountForThisSpecificChunk * 3,
@@ -624,6 +687,7 @@ export const ParallelDataOrchestrator: React.FC = () => {
                 sandboxOrbScale={sandboxOrbScale}
                 sandboxWallScale={sandboxWallScale}
                 wallsConfig={wallsConfig}
+                planesConfig={planesConfig}
                 orbPositions={orbPositions}
                 activeRoomIndex={activeRoomIndex}
                 selectedElementId={selectedElementId}
@@ -676,36 +740,36 @@ export const ParallelDataOrchestrator: React.FC = () => {
 
             {/* ROOM 2: Particle Sandbox */}
             <div className="section transparent-section">
-              <div className="flex flex-col h-full justify-center items-center p-4 md:p-8 select-none max-w-4xl mx-auto">
+              <div className="flex flex-col md:flex-row h-full w-full pointer-events-none">
+                {/* Editor Pane (Left Side) */}
                 <div 
-                  className={`backdrop-blur-xl bg-black/50 border border-fuchsia-500/30 p-6 md:p-10 rounded-3xl w-full pointer-events-auto shadow-[0_0_30px_rgba(255,0,255,0.1)] transition-all duration-500 ${!isSandboxMenuHovered ? 'opacity-40 hover:opacity-100' : 'opacity-100'}`}
-                  onMouseEnter={() => setIsSandboxMenuHovered(true)}
-                  onMouseLeave={() => setIsSandboxMenuHovered(false)}
+                  className={`pointer-events-auto flex flex-col h-full bg-black/80 md:bg-black/90 backdrop-blur-md border-r border-fuchsia-500/30 w-full md:w-[400px] lg:w-[450px] transition-transform duration-500 pt-20 pb-4 px-6 overflow-hidden shadow-[20px_0_50px_rgba(255,0,255,0.05)] ${isSandboxMenuMinimized ? '-translate-x-[calc(100%-60px)]' : 'translate-x-0'}`}
                 >
-                  <div className="flex justify-between items-center mb-6 border-b border-fuchsia-500/20 pb-4">
-                    <h2 className={`text-2xl sm:text-3xl md:text-4xl font-mono text-fuchsia-400 drop-shadow-[0_0_15px_#f0f] pointer-events-auto shrink-0 transition-opacity`}>
-                      PARTICLE_SANDBOX
+                  <div className="flex justify-between items-center mb-6 border-b border-fuchsia-500/20 pb-4 pt-12 md:pt-0 shrink-0">
+                    <h2 className="text-xl sm:text-2xl font-mono text-fuchsia-400 drop-shadow-[0_0_10px_#f0f] tracking-widest uppercase">
+                      Env Editor
                     </h2>
                     <button 
                       onClick={() => setIsSandboxMenuMinimized(!isSandboxMenuMinimized)}
-                      className="text-fuchsia-300 hover:text-white p-2 px-4 border border-fuchsia-500/50 rounded-full bg-fuchsia-500/10 hover:bg-fuchsia-500/30 transition-colors font-mono text-xs uppercase tracking-widest"
+                      className="text-fuchsia-300 hover:text-white p-2 w-10 h-10 flex items-center justify-center border border-fuchsia-500/50 rounded-full bg-fuchsia-500/10 hover:bg-fuchsia-500/30 transition-colors font-mono text-xs shrink-0"
+                      title={isSandboxMenuMinimized ? "Expand" : "Collapse"}
                     >
-                      {isSandboxMenuMinimized ? 'Maximize' : 'Minimize'}
+                      {isSandboxMenuMinimized ? '▶' : '◀'}
                     </button>
                   </div>
                   
-                  <div className={`transition-all duration-500 origin-top overflow-hidden max-h-[70vh] overflow-y-auto scrollable-content pr-2 custom-scrollbar ${isSandboxMenuMinimized ? 'h-0 opacity-0' : 'h-auto opacity-100'}`}>
-                    <p className="text-fuchsia-200/80 font-mono text-base mb-8 text-center leading-relaxed">
-                      Customize global particle fields and orb configurations dynamically. 
-                      Experiment with layout variables to shape the 3D space.
+                  <div className={`flex flex-col flex-1 overflow-y-auto pr-2 custom-scrollbar transition-opacity duration-300 ${isSandboxMenuMinimized ? 'opacity-0' : 'opacity-100'}`}>
+                    <p className="text-fuchsia-200/60 font-mono text-xs mb-6 uppercase tracking-widest border-l-2 border-fuchsia-500/50 pl-3">
+                      Comprehensive Environment Construction. Modify Orbs, Planes, Walls, and Global Properties.
                     </p>
-                    <div className="flex flex-col gap-6">
-                       <div className="flex flex-col gap-2">
-                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider mb-1">
-                           Select Element to Position
+                    
+                    <div className="flex flex-col gap-6 pb-20">
+                       <div className="flex flex-col gap-2 bg-fuchsia-900/10 p-4 rounded-xl border border-fuchsia-500/20">
+                         <label className="text-fuchsia-300 font-mono text-xs uppercase tracking-wider mb-2 flex items-center gap-2">
+                           <span className="w-2 h-2 bg-fuchsia-500 rounded-full"></span> Scene Graph
                          </label>
                          <select 
-                           className="bg-black/60 border border-fuchsia-400/50 text-fuchsia-300 p-3 rounded-xl font-mono text-base focus:outline-none focus:border-fuchsia-400"
+                           className="bg-black/80 border border-fuchsia-400/50 text-fuchsia-300 p-3 rounded-lg font-mono text-sm focus:outline-none focus:border-fuchsia-400"
                            value={selectedElementId}
                            onChange={(e) => setSelectedElementId(e.target.value)}
                          >
@@ -719,95 +783,121 @@ export const ParallelDataOrchestrator: React.FC = () => {
                                <option key={orb.id} value={orb.id}>{orb.label}</option>
                              ))}
                            </optgroup>
+                           <optgroup label="Planes">
+                             {planesConfig.map((plane) => (
+                               <option key={plane.id} value={plane.id}>{plane.label}</option>
+                             ))}
+                           </optgroup>
                          </select>
                        </div>
 
-                       <div className="flex gap-4">
-                         <button onClick={addNewWall} className="flex-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
-                           Add New Wall
-                         </button>
-                         <button onClick={addNewOrb} className="flex-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-300 border border-fuchsia-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
-                           Add New Orb
-                         </button>
-                         <button onClick={duplicateSelectedElement} className="flex-1 bg-fuchsia-600/20 hover:bg-fuchsia-600/40 text-fuchsia-300 border border-fuchsia-500/50 py-2 rounded-xl font-mono text-xs uppercase tracking-wider transition-colors">Copy</button>
-                          <button onClick={saveConfigToFile} className="flex-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/50 py-2 rounded-xl font-mono text-sm uppercase tracking-wider transition-colors">
-                           Save Config
-                         </button>
+                       <div className="grid grid-cols-2 gap-2">
+                         <button onClick={addNewWall} className="bg-cyan-600/10 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 py-3 rounded-lg font-mono text-xs uppercase tracking-widest transition-all hover:shadow-[0_0_15px_rgba(0,255,255,0.2)]">+ Wall</button>
+                         <button onClick={addNewPlane} className="bg-purple-600/10 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30 py-3 rounded-lg font-mono text-xs uppercase tracking-widest transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]">+ Plane</button>
+                         <button onClick={addNewOrb} className="bg-fuchsia-600/10 hover:bg-fuchsia-600/30 text-fuchsia-400 border border-fuchsia-500/30 py-3 rounded-lg font-mono text-xs uppercase tracking-widest transition-all hover:shadow-[0_0_15px_rgba(255,0,255,0.2)]">+ Orb</button>
+                         <button onClick={duplicateSelectedElement} className="bg-emerald-600/10 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 py-3 rounded-lg font-mono text-xs uppercase tracking-widest transition-all hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]">Duplicate</button>
                        </div>
 
-                       <div className="px-4 py-6 border border-fuchsia-500/20 rounded-2xl bg-black/40 flex flex-col gap-4">
-                         <h3 className="text-fuchsia-400 font-mono text-lg mb-2">
-                           {selectedElementId.startsWith('wall') ? 'Wall Controls' : 'Orb Controls'}
+                       <div className="px-5 py-6 border border-fuchsia-500/20 rounded-xl bg-black/60 flex flex-col gap-5 drop-shadow-lg">
+                         <h3 className="text-fuchsia-400 font-mono text-sm tracking-widest uppercase mb-1 flex items-center justify-between">
+                           <span>Transform Details</span>
+                           <span className="text-xs text-fuchsia-500/50">{selectedElementId}</span>
                          </h3>
                          {(() => {
                            const isWall = selectedElementId.startsWith("wall");
-                           const targetList = isWall ? wallsConfig : orbsConfig;
+                           const isPlane = selectedElementId.startsWith("plane");
+                           const targetList = isWall ? wallsConfig : isPlane ? planesConfig : orbsConfig;
                            const targetItem = targetList.find(x => x.id === selectedElementId);
-                           const updatePos = isWall ? updateWallPosition : updateOrbPosition;
+                           const updatePos = isWall ? updateWallPosition : isPlane ? updatePlanePosition : updateOrbPosition;
 
-                           if (!targetItem) return null;
+                           if (!targetItem) return <div className="text-fuchsia-500/50 text-xs font-mono">No element selected.</div>;
                            return (
-                             <>
-                               <div className="flex flex-col gap-2">
-                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                                   <span>Position X</span>
-                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[0])} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
+                             <div className="flex flex-col gap-5">
+                               <div className="flex flex-col gap-1">
+                                 <label className="text-fuchsia-300/80 font-mono text-[10px] uppercase tracking-widest flex justify-between">
+                                   <span>Transl. X</span>
+                                   <input type="number" className="bg-transparent text-right w-16 text-fuchsia-400 focus:outline-none border-b border-fuchsia-500/30" value={Math.round(targetItem.position[0])} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
                                  </label>
-                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[0]} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
+                                 <input type="range" className="w-full h-1 bg-fuchsia-900 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" min="-2000" max="2000" step="10" value={targetItem.position[0]} onChange={(e) => updatePos(targetItem.id, 0, Number(e.target.value))} />
                                </div>
-                               <div className="flex flex-col gap-2">
-                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                                   <span>Position Y</span>
-                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[1])} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
+                               <div className="flex flex-col gap-1">
+                                 <label className="text-fuchsia-300/80 font-mono text-[10px] uppercase tracking-widest flex justify-between">
+                                   <span>Transl. Y</span>
+                                   <input type="number" className="bg-transparent text-right w-16 text-fuchsia-400 focus:outline-none border-b border-fuchsia-500/30" value={Math.round(targetItem.position[1])} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
                                  </label>
-                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[1]} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
+                                 <input type="range" className="w-full h-1 bg-fuchsia-900 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" min="-2000" max="2000" step="10" value={targetItem.position[1]} onChange={(e) => updatePos(targetItem.id, 1, Number(e.target.value))} />
                                </div>
-                               <div className="flex flex-col gap-2">
-                                 <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                                   <span>Position Z</span>
-                                   <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Math.round(targetItem.position[2])} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
+                               <div className="flex flex-col gap-1">
+                                 <label className="text-fuchsia-300/80 font-mono text-[10px] uppercase tracking-widest flex justify-between">
+                                   <span>Transl. Z</span>
+                                   <input type="number" className="bg-transparent text-right w-16 text-fuchsia-400 focus:outline-none border-b border-fuchsia-500/30" value={Math.round(targetItem.position[2])} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
                                  </label>
-                                 <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="-2000" max="2000" step="10" value={targetItem.position[2]} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
+                                 <input type="range" className="w-full h-1 bg-fuchsia-900 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" min="-2000" max="2000" step="10" value={targetItem.position[2]} onChange={(e) => updatePos(targetItem.id, 2, Number(e.target.value))} />
                                </div>
-                               {isWall && 'scale' in targetItem && (
-                                 <div className="flex flex-col gap-2">
-                                   <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                                     <span>Scale</span>
-                                     <input type="number" className="bg-transparent text-right w-20 border-b border-fuchsia-500/30 text-fuchsia-500 focus:outline-none" value={Number(targetItem.scale.toFixed(2))} onChange={(e) => updateWallScale(targetItem.id, Number(e.target.value))} />
+                               {'scale' in targetItem && (
+                                 <div className="flex flex-col gap-1 mt-2 p-3 bg-fuchsia-900/10 rounded-lg border border-fuchsia-500/20">
+                                   <label className="text-fuchsia-300/80 font-mono text-[10px] uppercase tracking-widest flex justify-between">
+                                     <span>Scale Multiplier</span>
+                                     <input type="number" className="bg-transparent text-right w-16 text-fuchsia-400 focus:outline-none border-b border-fuchsia-500/30" value={Number(targetItem.scale.toFixed(2))} onChange={(e) => isWall ? updateWallScale(targetItem.id, Number(e.target.value)) : updatePlaneScale(targetItem.id, Number(e.target.value))} />
                                    </label>
-                                   <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.1" max="10" step="0.1" value={targetItem.scale} onChange={(e) => updateWallScale(targetItem.id, Number(e.target.value))} />
+                                   <input type="range" className="w-full h-1 bg-cyan-900 rounded-lg appearance-none cursor-pointer accent-cyan-400" min="0.1" max="1000" step="1" value={targetItem.scale} onChange={(e) => isWall ? updateWallScale(targetItem.id, Number(e.target.value)) : updatePlaneScale(targetItem.id, Number(e.target.value))} />
                                  </div>
                                )}
-                             </>
+                             </div>
                            );
                          })()}
-
                        </div>
 
-                       <div className="h-px w-full bg-fuchsia-500/20 my-2"></div>
+                       <div className="h-px w-full bg-gradient-to-r from-transparent via-fuchsia-500/50 to-transparent my-2"></div>
 
-                       <div className="flex flex-col gap-2">
-                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                           <span>Particle Density %</span>
-                           <span className="text-fuchsia-500">{sandboxDensity}%</span>
-                         </label>
-                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="10" max="200" value={sandboxDensity} onChange={(e) => setSandboxDensity(Number(e.target.value))} />
+                       <div className="flex flex-col gap-5 pb-6">
+                         <h3 className="text-fuchsia-400/80 font-mono text-sm tracking-widest uppercase mb-1">Global Overrides</h3>
+                         <div className="flex flex-col gap-2">
+                           <label className="text-fuchsia-300/80 font-mono text-xs uppercase tracking-widest flex justify-between">
+                             <span>VFX Density</span>
+                             <span className="text-cyan-400 font-bold">{sandboxDensity}%</span>
+                           </label>
+                           <input type="range" className="w-full h-2 bg-black rounded-lg appearance-none cursor-pointer border border-cyan-500/30 accent-cyan-500" min="10" max="200" value={sandboxDensity} onChange={(e) => setSandboxDensity(Number(e.target.value))} />
+                         </div>
+                         <div className="flex flex-col gap-2">
+                           <label className="text-fuchsia-300/80 font-mono text-xs uppercase tracking-widest flex justify-between">
+                             <span>Master Orb Scale</span>
+                             <span className="text-fuchsia-500 font-bold">{sandboxOrbScale.toFixed(1)}x</span>
+                           </label>
+                           <input type="range" className="w-full h-2 bg-black rounded-lg appearance-none cursor-pointer border border-fuchsia-500/30 accent-fuchsia-500" min="0.5" max="3" step="0.1" value={sandboxOrbScale} onChange={(e) => setSandboxOrbScale(Number(e.target.value))} />
+                         </div>
+                         <div className="flex flex-col gap-2">
+                           <label className="text-fuchsia-300/80 font-mono text-xs uppercase tracking-widest flex justify-between">
+                             <span>Space Expander</span>
+                             <span className="text-purple-400 font-bold">{sandboxWallScale.toFixed(1)}x</span>
+                           </label>
+                           <input type="range" className="w-full h-2 bg-black rounded-lg appearance-none cursor-pointer border border-purple-500/30 accent-purple-500" min="0.5" max="5" step="0.1" value={sandboxWallScale} onChange={(e) => setSandboxWallScale(Number(e.target.value))} />
+                         </div>
                        </div>
-                       <div className="flex flex-col gap-2">
-                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                           <span>Global Orb Scale</span>
-                           <span className="text-fuchsia-500">{sandboxOrbScale.toFixed(1)}x</span>
-                         </label>
-                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.5" max="3" step="0.1" value={sandboxOrbScale} onChange={(e) => setSandboxOrbScale(Number(e.target.value))} />
-                       </div>
-                       <div className="flex flex-col gap-2">
-                         <label className="text-fuchsia-300 font-mono text-sm uppercase tracking-wider flex justify-between">
-                           <span>Cloud Expansion</span>
-                           <span className="text-fuchsia-500">{sandboxWallScale.toFixed(1)}x</span>
-                         </label>
-                         <input type="range" className="w-full accent-fuchsia-500 cursor-pointer" min="0.5" max="5" step="0.1" value={sandboxWallScale} onChange={(e) => setSandboxWallScale(Number(e.target.value))} />
-                       </div>
+                       
+                       <button onClick={saveConfigToFile} className="mt-auto bg-fuchsia-600/20 hover:bg-fuchsia-500 w-full text-white border border-fuchsia-500/50 py-4 rounded-xl font-mono text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 mb-10 shadow-[0_0_15px_rgba(255,0,255,0.1)]">
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                         Export JSON State
+                       </button>
                     </div>
+                  </div>
+                </div>
+                
+                {/* 3D Viewport Area - Transparent */}
+                <div className="hidden md:flex flex-1 relative items-center justify-center pointer-events-none">
+                  {/* Subtle Target overlay HUD */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                     <div className="w-16 h-16 border border-fuchsia-500/20 rounded-full flex items-center justify-center">
+                       <div className="w-1 h-1 bg-fuchsia-500 rounded-full shadow-[0_0_10px_#f0f]"></div>
+                     </div>
+                     <div className="absolute w-[180px] h-px bg-gradient-to-r from-transparent via-fuchsia-500/50 to-transparent"></div>
+                     <div className="absolute h-[180px] w-px bg-gradient-to-b from-transparent via-fuchsia-500/50 to-transparent"></div>
+                  </div>
+                  <div className="absolute bottom-8 right-8 text-right font-mono">
+                    <div className="text-fuchsia-500/70 text-xs tracking-widest uppercase mb-1">Coordinates Active</div>
+                    <div className="text-fuchsia-300 text-sm tracking-widest shadow-[0_0_10px_rgba(0,0,0,0.8)]">X: {Math.round((orbsConfig.find(o => o.id === selectedElementId)?.position[0] ?? wallsConfig.find(w => w.id === selectedElementId)?.position[0] ?? planesConfig.find(p => p.id === selectedElementId)?.position[0] ?? 0))}</div>
+                    <div className="text-fuchsia-300 text-sm tracking-widest shadow-[0_0_10px_rgba(0,0,0,0.8)]">Y: {Math.round((orbsConfig.find(o => o.id === selectedElementId)?.position[1] ?? wallsConfig.find(w => w.id === selectedElementId)?.position[1] ?? planesConfig.find(p => p.id === selectedElementId)?.position[1] ?? 0))}</div>
+                    <div className="text-fuchsia-300 text-sm tracking-widest shadow-[0_0_10px_rgba(0,0,0,0.8)]">Z: {Math.round((orbsConfig.find(o => o.id === selectedElementId)?.position[2] ?? wallsConfig.find(w => w.id === selectedElementId)?.position[2] ?? planesConfig.find(p => p.id === selectedElementId)?.position[2] ?? 0))}</div>
                   </div>
                 </div>
               </div>

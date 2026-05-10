@@ -2,12 +2,9 @@ import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const vaultDir = path.join(__dirname, "src");
+const rootDir = process.cwd();
+const vaultDir = path.join(rootDir, "src");
 
 // Ensure the directory exists
 if (!fs.existsSync(vaultDir)) {
@@ -103,7 +100,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
+    const distPath = path.join(rootDir, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

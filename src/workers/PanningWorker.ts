@@ -1,31 +1,49 @@
-export const workerCode = `
-  let targetPos = [0, 50, 600];
-  let targetLookAt = [0, 50, 0];
-  let currentPos = [0, 50, 600];
-  let currentLookAt = [0, 50, 0];
-
+export const positionWorkerCode = `
   self.onmessage = function(e) {
-    if (e.data.type === 'SET_TARGET') {
-      targetPos = e.data.targetPos;
-      targetLookAt = e.data.targetLookAt;
-    } else if (e.data.type === 'TICK') {
-        const dt = Math.min(e.data.delta, 0.1);
-        const lerpFactor = 1 - Math.exp(-6 * dt); // Faster, smoother dampening
-        
-        // Custom Lerp
-        currentPos[0] += (targetPos[0] - currentPos[0]) * lerpFactor;
-        currentPos[1] += (targetPos[1] - currentPos[1]) * lerpFactor;
-        currentPos[2] += (targetPos[2] - currentPos[2]) * lerpFactor;
+      if (e.data.type === 'CALCULATE_POS') {
+          const { c, t } = e.data;
+          const steps = 120; // Pre-calc 120 frames
+          const trajectory = [];
+          let current = [...c];
+          
+          for (let i = 0; i < steps; i++) {
+              // Smooth easing out (exponential decay approximation with discrete steps)
+              const lerpF = 1 - Math.exp(-6 * (1/60));
+              current[0] += (t[0] - current[0]) * lerpF;
+              current[1] += (t[1] - current[1]) * lerpF;
+              current[2] += (t[2] - current[2]) * lerpF;
+              trajectory.push([...current]);
+          }
 
-        currentLookAt[0] += (targetLookAt[0] - currentLookAt[0]) * lerpFactor;
-        currentLookAt[1] += (targetLookAt[1] - currentLookAt[1]) * lerpFactor;
-        currentLookAt[2] += (targetLookAt[2] - currentLookAt[2]) * lerpFactor;
+          // Force the final position directly to eliminate drifting
+          trajectory.push([...t]);
 
-        self.postMessage({
-            type: 'TICK_RESULT',
-            currentPos,
-            currentLookAt
-        });
-    }
+          self.postMessage({ type: 'POS_RESULT', trajectory });
+          self.close();
+      }
   }
 `;
+
+export const lookAtWorkerCode = `
+  self.onmessage = function(e) {
+      if (e.data.type === 'CALCULATE_LOOKAT') {
+          const { c, t } = e.data;
+          const steps = 120;
+          const trajectory = [];
+          let current = [...c];
+          
+          for (let i = 0; i < steps; i++) {
+              const lerpF = 1 - Math.exp(-6 * (1/60));
+              current[0] += (t[0] - current[0]) * lerpF;
+              current[1] += (t[1] - current[1]) * lerpF;
+              current[2] += (t[2] - current[2]) * lerpF;
+              trajectory.push([...current]);
+          }
+
+          trajectory.push([...t]);
+          self.postMessage({ type: 'LOOKAT_RESULT', trajectory });
+          self.close();
+      }
+  }
+`;
+

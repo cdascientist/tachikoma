@@ -142,39 +142,55 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     const groupRef = useRef<THREE.Group>(null);
     const { viewport, camera } = useThree();
     
-    // Get viewport size at Z=530 to accurately place UI relative to edges
-    const currentViewport = viewport.getCurrentViewport(camera, new THREE.Vector3(0, 50, 530));
+    // Get viewport size at a fixed distance to accurately place UI relative to edges
+    const distance = 70;
     
-    // Place icons slightly inward from the absolute edges
-    // The center of our group will be at [0, 50, 530] (matching camera's line of sight over local Z)
-    const xOffset = currentViewport.width / 2 - 12;
-    const yOffset = -currentViewport.height / 2 + 20; // Moved up slightly to align with CDA SCIENTIST
-
-    useFrame(({ camera }) => {
+    useFrame(({ camera, viewport }) => {
         if (groupRef.current) {
-            // Only show when near the home page coordinates (Z ~ 600)
-            groupRef.current.visible = camera.position.z > 550;
+            // Only show when extremely close to the home page coordinates
+            const distanceToHome = camera.position.distanceTo(new THREE.Vector3(0, 50, 600));
+            
+            // Fade out smoothly using scale if not exactly on home page (distance < 50 for max scale, 0 beyond 150)
+            const targetVisible = distanceToHome < 150;
+            groupRef.current.visible = targetVisible;
+            
+            // Follow the camera perfectly as a HUD
+            groupRef.current.position.copy(camera.position);
+            groupRef.current.quaternion.copy(camera.quaternion);
+            groupRef.current.translateZ(-distance);
         }
     });
 
+    // Place icons slightly inward from the absolute edges
+    // Make sure we have a fallback or scale it down if on a tiny mobile screen
+    const isMobile = viewport.width < 50; 
+    const currentViewport = viewport.getCurrentViewport(camera, new THREE.Vector3(0, 0, -distance));
+    const xOffset = currentViewport.width / 2 - (isMobile ? 8 : 12);
+    const yOffset = -currentViewport.height / 2 + (isMobile ? 12 : 20);
+    const iconScale = isMobile ? 0.7 : 1;
+
     return (
-        <group ref={groupRef} position={[0, 50, 530]}>
+        <group ref={groupRef}>
             {/* Stacking the LinkedIn icon on top of the Instagram icon on the right side */}
-            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[xOffset, yOffset + 16, 0]}>
-                <ParticleIcon 
-                    type="linkedin" 
-                    color="#00FFFF" // cyan for LinkedIn feeling but cyberpunk
-                    position={[0, 0, 0]} 
-                    url="https://www.linkedin.com/in/cdascientist/" 
-                />
+            <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[xOffset, yOffset + (isMobile ? 12 : 16), 0]}>
+                <group scale={[iconScale, iconScale, iconScale]}>
+                    <ParticleIcon 
+                        type="linkedin" 
+                        color="#00FFFF" // cyan for LinkedIn feeling but cyberpunk
+                        position={[0, 0, 0]} 
+                        url="https://www.linkedin.com/in/cdascientist/" 
+                    />
+                </group>
             </Float>
             <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.5} floatingRange={[-1, 1]} position={[xOffset, yOffset, 0]}>
-                <ParticleIcon 
-                    type="instagram" 
-                    color="#FF00FF" // fuchsia for Instagram feeling but cyberpunk
-                    position={[0, 0, 0]} 
-                    url="https://www.instagram.com/cdascientist" 
-                />
+                <group scale={[iconScale, iconScale, iconScale]}>
+                    <ParticleIcon 
+                        type="instagram" 
+                        color="#FF00FF" // fuchsia for Instagram feeling but cyberpunk
+                        position={[0, 0, 0]} 
+                        url="https://www.instagram.com/cdascientist" 
+                    />
+                </group>
             </Float>
         </group>
     );
