@@ -2,6 +2,10 @@ import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
+import hpp from "hpp";
 
 const rootDir = process.cwd();
 const vaultDir = path.join(rootDir, "src");
@@ -32,8 +36,28 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+  app.set("trust proxy", 1); // Trust first proxy for Cloud Run ingress
+
+  // Security Middlewares
+  app.use(helmet({
+    contentSecurityPolicy: false // Disable CSP for Vite dev server compatibility (or configure strictly later)
+  }));
+  app.use(cors()); // Enable CORS
+  app.use(hpp()); // Prevent HTTP Parameter Pollution
+
+  // Rate Limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "Too many requests from this IP, please try again after 15 minutes",
+    validate: { xForwardedForHeader: false, trustProxy: false }
+  });
+  app.use("/api/", limiter); // Apply rate limiter to API routes only
+
   // JSON parser for explicit API requests
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" })); // Prevent large JSON payload attacks
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });

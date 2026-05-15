@@ -59,10 +59,10 @@ export const ParticleWall: React.FC<ParticleWallProps> = ({
                     />
                 </bufferGeometry>
                 <pointsMaterial
-                    size={0.15}
+                    size={4}
                     vertexColors={true}
                     transparent={true}
-                    opacity={0.9}
+                    opacity={0.8}
                     blending={THREE.AdditiveBlending}
                     depthWrite={false}
                     sizeAttenuation={true}

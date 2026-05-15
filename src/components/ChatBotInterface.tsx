@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { GoogleGenAI } from '@google/genai';
+import { HugeParticleOrb } from './HugeParticleOrb';
 
 const CONFIG = {
     TTS_ENGINE: 'neural',
@@ -349,7 +350,7 @@ export const ChatBotInterface: React.FC = React.memo(() => {
     const isBusy = isProcessing || isSpeaking;
 
     return (
-        <div className="relative flex flex-col items-center justify-end h-full w-full max-w-4xl mx-auto pointer-events-auto p-4 pb-20">
+        <div className="relative flex flex-col items-center justify-center h-full w-full max-w-4xl mx-auto pointer-events-auto p-4">
             {/* Top Settings Bar */}
             <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
                 <button 
@@ -432,7 +433,16 @@ export const ChatBotInterface: React.FC = React.memo(() => {
                     <div className="flex flex-col items-center w-full gap-4 relative">
                         {/* Huge PTT Orb */}
                         <div 
-                            className={`w-28 h-28 md:w-32 md:h-32 flex-shrink-0 cursor-pointer relative rounded-full overflow-hidden transition-all duration-300 border-2 flex items-center justify-center ${isRecording ? 'scale-90 shadow-[0_0_80px_rgba(255,0,0,0.8)] border-red-500 bg-red-500/20' : 'hover:scale-110 shadow-[0_0_60px_rgba(0,255,255,0.4)] border-cyan-500/80 bg-cyan-900/40'} ${isBusy ? 'opacity-50 pointer-events-none shadow-[0_0_40px_rgba(255,0,255,0.4)] border-fuchsia-500' : ''}`}
+                            className={`w-32 h-32 md:w-40 md:h-40 flex-shrink-0 cursor-pointer relative rounded-full transition-all duration-500 border-0 flex items-center justify-center 
+                            ${isRecording ? 'scale-95 shadow-[0_0_100px_rgba(255,0,0,0.9),inset_0_0_50px_rgba(255,0,0,0.8)] bg-gradient-to-br from-red-400 via-red-600 to-red-900 animate-pulse' 
+                            : 'hover:scale-105 shadow-[0_0_80px_rgba(0,255,255,0.6),inset_0_0_40px_rgba(0,255,255,0.5)] bg-gradient-to-br from-cyan-300 via-cyan-600 to-blue-900'} 
+                            ${isSpeaking ? 'animate-[pulse_0.5s_ease-in-out_infinite] scale-110 shadow-[0_0_120px_rgba(255,0,255,0.8),inset_0_0_60px_rgba(255,0,255,0.6)] bg-gradient-to-br from-fuchsia-300 via-fuchsia-600 to-purple-900' : ''}
+                            ${isBusy && !isSpeaking ? 'opacity-70 pointer-events-none' : ''}`}
+                            style={{
+                                boxShadow: isSpeaking ? '0 0 100px rgba(255,0,255,0.8), inset 0 0 60px rgba(255,0,255,0.6)' : 
+                                          isRecording ? '0 0 100px rgba(255,0,0,0.8), inset 0 0 60px rgba(255,0,0,0.5)' : 
+                                          '0 0 80px rgba(0,255,255,0.4), inset 0 -20px 40px rgba(0,0,0,0.5), inset 0 20px 40px rgba(255,255,255,0.4)'
+                            }}
                             onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
                             onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
                             onMouseLeave={(e) => { if (isRecording) stopRecording(); }}
@@ -440,11 +450,25 @@ export const ChatBotInterface: React.FC = React.memo(() => {
                             onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
                             onContextMenu={(e) => e.preventDefault()}
                         >
-                            {!isBusy ? (
-                                <svg className={`w-12 h-12 md:w-16 md:h-16 transition-colors ${isRecording ? 'text-red-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
-                            ) : (
-                                <svg className="w-12 h-12 md:w-16 md:h-16 text-fuchsia-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                            )}
+                            {/* Inner core reflection */}
+                            <div className="absolute top-[15%] left-[15%] w-[30%] h-[30%] bg-white rounded-full opacity-60 blur-[10px] pointer-events-none z-20"></div>
+                            
+                            {/* The 3D Orb */}
+                            <div className="absolute inset-0 z-10 rounded-full overflow-hidden pointer-events-none">
+                                <Canvas camera={{ position: [0, 0, 150], fov: 75 }}>
+                                    <ambientLight intensity={1.5} />
+                                    <directionalLight position={[10, 20, 10]} intensity={2} />
+                                    <HugeParticleOrb 
+                                        position={[0, 0, 0]} 
+                                        isListening={isRecording}
+                                        isSpeaking={isSpeaking}
+                                        isCyanDominant={!isRecording && !isSpeaking}
+                                        isMultiColor={true}
+                                        isStationary={true}
+                                        offsetScale={1.5}
+                                    />
+                                </Canvas>
+                            </div>
                         </div>
                         
                         <p className="text-xs text-cyan-500/60 font-mono tracking-widest mt-2">

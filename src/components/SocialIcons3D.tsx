@@ -147,12 +147,7 @@ const ParticleIcon: React.FC<{ type: 'linkedin' | 'instagram', color: string, po
     
     useFrame(({ camera, viewport }) => {
         if (groupRef.current) {
-            // Only show when extremely close to the home page coordinates
-            const distanceToHome = camera.position.distanceTo(new THREE.Vector3(0, 50, 600));
-            
-            // Fade out smoothly using scale if not exactly on home page (distance < 50 for max scale, 0 beyond 150)
-            const targetVisible = distanceToHome < 150;
-            groupRef.current.visible = targetVisible;
+            groupRef.current.visible = true;
             
             // Follow the camera perfectly as a HUD
             groupRef.current.position.copy(camera.position);

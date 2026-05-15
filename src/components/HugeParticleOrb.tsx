@@ -11,6 +11,8 @@ interface HugeParticleOrbProps {
     onClick?: (e: any) => void;
     onPointerMove?: (e: any) => void;
     isHighlighted?: boolean;
+    isMultiColor?: boolean;
+    isStationary?: boolean;
 }
 
 export const HugeParticleOrb: React.FC<HugeParticleOrbProps> = ({ 
@@ -21,7 +23,9 @@ export const HugeParticleOrb: React.FC<HugeParticleOrbProps> = ({
     offsetScale = 1.0,
     onClick,
     onPointerMove,
-    isHighlighted = false
+    isHighlighted = false,
+    isMultiColor = false,
+    isStationary = false
 }) => {
     const pointsRef = useRef<THREE.Points>(null);
     const materialRef = useRef<THREE.PointsMaterial>(null);
@@ -54,13 +58,22 @@ export const HugeParticleOrb: React.FC<HugeParticleOrbProps> = ({
 
             const mix = Math.random();
             const color = new THREE.Color();
-            const cyanChance = isCyanDominant ? 0.7 : 0.3;
             
-            if (mix < cyanChance) {
-                color.setHex(0x00FFFF);
+            if (isMultiColor) {
+                 const rand = Math.random();
+                 if (rand < 0.3) color.setHex(0x00FFFF);       // Cyan
+                 else if (rand < 0.6) color.setHex(0xFF00FF);   // Fuchsia
+                 else if (rand < 0.85) color.setHex(0x8A2BE2);  // BlueViolet
+                 else color.setHex(0xFFFFFF);                   // White
             } else {
-                color.setHex(0xFF00FF);
+                const cyanChance = isCyanDominant ? 0.7 : 0.3;
+                if (mix < cyanChance) {
+                    color.setHex(0x00FFFF);
+                } else {
+                    color.setHex(0xFF00FF);
+                }
             }
+
             // If highlighted, boost color brightness
             if (isHighlighted) {
                 color.multiplyScalar(2.0);
@@ -70,13 +83,15 @@ export const HugeParticleOrb: React.FC<HugeParticleOrbProps> = ({
             colors[i * 3 + 2] = color.b;
         }
         return { positions, colors };
-    }, [isCyanDominant, offsetScale, radius, isHighlighted]);
+    }, [isCyanDominant, offsetScale, radius, isHighlighted, isMultiColor]);
 
     useFrame((state, delta) => {
         const t = state.clock.getElapsedTime();
         if (pointsRef.current) {
-            pointsRef.current.rotation.y = t * 0.2 * (offsetScale % 2 === 0 ? -1 : 1);
-            pointsRef.current.rotation.x = t * 0.1 * offsetScale;
+            if (!isStationary) {
+                pointsRef.current.rotation.y = t * 0.2 * (offsetScale % 2 === 0 ? -1 : 1);
+                pointsRef.current.rotation.x = t * 0.1 * offsetScale;
+            }
 
             wordPulseRef.current = THREE.MathUtils.lerp(wordPulseRef.current, 0, delta * 10);
 

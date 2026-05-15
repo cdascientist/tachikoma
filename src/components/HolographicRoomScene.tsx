@@ -8,6 +8,56 @@ import { SocialIcons3D } from './SocialIcons3D';
 import { HugeParticleOrb } from './HugeParticleOrb';
 import { positionWorkerCode, lookAtWorkerCode } from '../workers/PanningWorker';
 
+const OrbitingParticleOrb: React.FC<{
+    index: number;
+    totalOrbs: number;
+    centerPos: [number, number, number];
+    originalPos: [number, number, number];
+    isListening: boolean;
+    isSpeaking: boolean;
+    isCyanDominant: boolean;
+    offsetScale: number;
+    onClick: () => void;
+    isHighlighted: boolean;
+}> = ({ index, totalOrbs, centerPos, originalPos, isListening, isSpeaking, isCyanDominant, offsetScale, onClick, isHighlighted }) => {
+    const ref = useRef<THREE.Group>(null);
+    const radius = 600;
+    
+    // Distribute evenly around the circle, except orb 0 which is the center
+    const angleOffset = index === 0 ? 0 : (index / (totalOrbs - 1)) * Math.PI * 2;
+    
+    useFrame((state) => {
+        if (ref.current) {
+            if (index === 0) {
+                ref.current.position.set(centerPos[0], centerPos[1], centerPos[2]);
+            } else {
+                const time = state.clock.elapsedTime * 0.1; // Orbit speed
+                const currentAngle = angleOffset + time;
+                const x = centerPos[0] + Math.cos(currentAngle) * radius;
+                const z = centerPos[2] + Math.sin(currentAngle) * radius;
+                // Add a little vertical bobbing
+                const y = centerPos[1] + Math.sin(time * 2 + index) * 50;
+                
+                ref.current.position.set(x, y, z);
+            }
+        }
+    });
+
+    return (
+        <group ref={ref}>
+            <HugeParticleOrb 
+                position={[0, 0, 0]} 
+                isListening={isListening}
+                isSpeaking={isSpeaking}
+                isCyanDominant={isCyanDominant}
+                offsetScale={offsetScale}
+                onClick={onClick}
+                isHighlighted={isHighlighted}
+            />
+        </group>
+    );
+};
+
 interface HolographicRoomSceneProperties {
     aggregatedParallelDataChunksMatrix: any[];
     sandboxDensity?: number;
@@ -331,34 +381,20 @@ export const HolographicRoomScene: React.FC<HolographicRoomSceneProperties> = Re
                 />
             ))}
 
-            {planesConfig.map((plane) => (
-                <mesh 
-                    key={plane.id}
-                    position={plane.position}
-                    rotation={[-Math.PI / 2, 0, 0]}
-                    scale={[plane.scale, plane.scale, 1]}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleElementClick(plane.id);
-                    }}
-                >
-                    <planeGeometry args={[10, 10, 16, 16]} />
-                    <meshBasicMaterial 
-                        color={selectedElementId === plane.id ? "#ffffff" : "#f0f"} 
-                        wireframe 
-                        transparent 
-                        opacity={0.3} 
-                    />
-                </mesh>
-            ))}
-
             {orbPositions && orbPositions.map((pos, index) => {
                 const isCyan = index === 0 || index === 2 || index === 3 || index === 5 || index === 6 || index === 7 || index >= 9;
                 const scale = index === 1 || index === 5 ? 1.5 : (index === 2 ? 2.5 : (index === 8 ? 1.8 : (index === 3 || index === 6 ? 1.2 : 1.0)));
+                
+                // Get the center (orb 0)
+                const centerPos = orbPositions[0] || [0, 50, 0];
+                
                 return (
-                    <HugeParticleOrb 
+                    <OrbitingParticleOrb 
                         key={index}
-                        position={pos}
+                        index={index}
+                        totalOrbs={orbPositions.length}
+                        centerPos={centerPos}
+                        originalPos={pos}
                         isListening={index === 1 ? isListening : false}
                         isSpeaking={index === 1 ? isSpeaking : false}
                         isCyanDominant={isCyan}
