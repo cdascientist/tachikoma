@@ -34,7 +34,8 @@
     "react-file-navigator": "^1.0.2-dev.1",
     "three": "^0.184.0",
     "video.js": "^8.23.7",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -43,6 +44,7 @@
     "@types/hpp": "^0.2.7",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.14.0",
+    "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

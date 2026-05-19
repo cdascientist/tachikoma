@@ -6,9 +6,32 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import hpp from "hpp";
+import { execSync } from "child_process";
+import http from "http";
+import { WebSocketServer, WebSocket } from "ws";
 
 const rootDir = process.cwd();
 const vaultDir = path.join(rootDir, "src");
+const workspaceDir = "/root/.openclaw/workspace";
+const openclawConfigPath = "/root/.openclaw/openclaw.json";
+const pollStatePath = "/var/lib/sendblue/poll-state.json";
+const forceFlagPath = "/var/lib/sendblue/force-respond.flag";
+
+// Read provider API keys from openclaw.json at startup
+function getProviderApiKey(provider: string): string {
+  try {
+    if (fs.existsSync(openclawConfigPath)) {
+      const cfg = JSON.parse(fs.readFileSync(openclawConfigPath, "utf-8"));
+      return cfg?.models?.providers?.[provider]?.apiKey || "";
+    }
+  } catch {}
+  return "";
+}
+const DEEPSEEK_API_KEY = getProviderApiKey("deepseek");
+const ANTHROPIC_API_KEY_SERVER = getProviderApiKey("anthropic");
+
+const GATEWAY_URL = "ws://127.0.0.1:8000";
+const GATEWAY_TOKEN = "tachikoma-gateway-token-2026";
 
 // Ensure the directory exists
 if (!fs.existsSync(vaultDir)) {
@@ -27,10 +50,14 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size
 });
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
 
 async function startServer() {
   const app = express();
@@ -99,7 +126,7 @@ async function startServer() {
   app.delete("/api/files/:filename", (req, res) => {
     const filename = req.params.filename;
     // VERY IMPORTANT: Prevent Path Traversal
-    const safeFilename = path.basename(filename); 
+    const safeFilename = path.basename(filename);
     const filePath = path.join(vaultDir, safeFilename);
 
     if (!fs.existsSync(filePath)) {
@@ -113,6 +140,755 @@ async function startServer() {
       }
       res.json({ success: true });
     });
+  });
+
+  // ========== WORKSPACE FILES ==========
+
+  app.get("/api/workspace/files", (req, res) => {
+    try {
+      if (!fs.existsSync(workspaceDir)) {
+        return res.json([]);
+      }
+      const files = fs.readdirSync(workspaceDir, { withFileTypes: true })
+        .filter(d => d.isFile() && d.name.endsWith(".md"))
+        .map(d => {
+          const fp = path.join(workspaceDir, d.name);
+          const stats = fs.statSync(fp);
+          return { name: d.name, size: stats.size, updatedAt: stats.mtime };
+        });
+      res.json(files);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/workspace/file/:name", (req, res) => {
+    try {
+      const safeName = path.basename(req.params.name);
+      const fp = path.join(workspaceDir, safeName);
+      if (!fs.existsSync(fp)) return res.status(404).json({ error: "File not found" });
+      const content = fs.readFileSync(fp, "utf-8");
+      res.json({ name: safeName, content, size: Buffer.byteLength(content, "utf-8") });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/workspace/file/:name", (req, res) => {
+    try {
+      const safeName = path.basename(req.params.name);
+      const fp = path.join(workspaceDir, safeName);
+      const { content } = req.body;
+      if (typeof content !== "string") return res.status(400).json({ error: "content required" });
+      fs.writeFileSync(fp, content, "utf-8");
+      res.json({ success: true, name: safeName });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ========== OPENCLAW CONFIG ==========
+
+  app.get("/api/openclaw/config", (req, res) => {
+    try {
+      if (!fs.existsSync(openclawConfigPath)) return res.status(404).json({ error: "Config not found" });
+      const raw = fs.readFileSync(openclawConfigPath, "utf-8");
+      res.json(JSON.parse(raw));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/openclaw/config", (req, res) => {
+    try {
+      const updates = req.body;
+      const current = JSON.parse(fs.readFileSync(openclawConfigPath, "utf-8"));
+      const merged = deepMerge(current, updates);
+      fs.writeFileSync(openclawConfigPath, JSON.stringify(merged, null, 2) + "\n", "utf-8");
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ========== OPENCLAW PROXY (so browser clients work from anywhere) ==========
+
+  app.use("/api/openclaw/v1", async (req, res) => {
+    try {
+      const target = `http://127.0.0.1:8000/v1${req.url}`;
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (typeof v === "string" && !["host", "connection"].includes(k.toLowerCase())) {
+          headers[k] = v;
+        }
+      }
+      const body = req.method !== "GET" && req.method !== "HEAD" ? JSON.stringify(req.body) : undefined;
+      const fetchRes = await fetch(target, { method: req.method, headers: { ...headers, "Content-Type": "application/json" }, body });
+      const text = await fetchRes.text();
+      res.status(fetchRes.status).set("Content-Type", fetchRes.headers.get("Content-Type") || "application/json").send(text);
+    } catch (err: any) {
+      res.status(502).json({ error: "OpenClaw gateway unreachable", detail: err.message });
+    }
+  });
+
+  // ========== SYSTEM SERVICES & RESOURCES ==========
+
+  app.get("/api/system/services", (req, res) => {
+    try {
+      const services = ["tachikoma-ui.service", "sendblue-poller.service", "tachikoma.service"];
+      const results: Record<string, any> = {};
+      for (const svc of services) {
+        try {
+          const out = execSync(`systemctl show ${svc} --property=ActiveState,SubState,ExecMainStartTimestamp --no-page`, { encoding: "utf-8", timeout: 3000 });
+          const parsed: Record<string, string> = {};
+          out.trim().split("\n").forEach(line => {
+            const [k, v] = line.split("=");
+            if (k && v !== undefined) parsed[k] = v;
+          });
+          results[svc] = {
+            active: parsed.ActiveState === "active" ? "running" : parsed.ActiveState,
+            substate: parsed.SubState || "",
+            startedAt: parsed.ExecMainStartTimestamp || "",
+          };
+        } catch {
+          results[svc] = { active: "unknown", substate: "", startedAt: "" };
+        }
+      }
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/system/resources", (req, res) => {
+    try {
+      const mem = execSync("free -b", { encoding: "utf-8", timeout: 2000 });
+      const disk = execSync("df -B1 /", { encoding: "utf-8", timeout: 2000 });
+      const uptime = execSync("uptime -p", { encoding: "utf-8", timeout: 2000 });
+
+      const memLines = mem.trim().split("\n");
+      const memParts = memLines[1]?.split(/\s+/);
+      const diskParts = disk.trim().split("\n")[1]?.split(/\s+/);
+
+      res.json({
+        memory: {
+          total: memParts?.[1] ? parseInt(memParts[1]) : 0,
+          used: memParts?.[2] ? parseInt(memParts[2]) : 0,
+          free: memParts?.[3] ? parseInt(memParts[3]) : 0,
+          available: memParts?.[6] ? parseInt(memParts[6]) : 0,
+        },
+        disk: {
+          total: diskParts?.[1] ? parseInt(diskParts[1]) : 0,
+          used: diskParts?.[2] ? parseInt(diskParts[2]) : 0,
+          available: diskParts?.[3] ? parseInt(diskParts[3]) : 0,
+        },
+        uptime: uptime.trim().replace(/^up\s+/, ""),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ========== IMESSAGE ==========
+
+  app.get("/api/imessage/state", (req, res) => {
+    try {
+      if (!fs.existsSync(pollStatePath)) return res.json({ messages: {} });
+      const raw = fs.readFileSync(pollStatePath, "utf-8");
+      res.json(JSON.parse(raw));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/imessage/log", (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const query = `SELECT id, from_number, to_number, content, is_inbound, status, created_at FROM tachikoma_alerts.imessage_log ORDER BY created_at DESC LIMIT ${limit}`;
+      const out = execSync(`mysql -N -B -e "${query.replace(/"/g, '\\"')}"`, { encoding: "utf-8", timeout: 5000 });
+      const rows = out.trim().split("\n").filter(Boolean).map(line => {
+        const cols = line.split("\t");
+        return {
+          id: cols[0],
+          from_number: cols[1],
+          to_number: cols[2],
+          content: cols[3],
+          direction: cols[4] === "1" ? "inbound" : "outbound",
+          status: cols[5],
+          created_at: cols[6],
+        };
+      });
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/imessage/stats", (req, res) => {
+    try {
+      const out = execSync(
+        `mysql -N -B -e "SELECT is_inbound, status, COUNT(*) FROM tachikoma_alerts.imessage_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) GROUP BY is_inbound, status"`,
+        { encoding: "utf-8", timeout: 5000 }
+      );
+      const stats: Record<string, number> = { total: 0, inbound: 0, outbound: 0, responded: 0, pending: 0, failed: 0 };
+      out.trim().split("\n").filter(Boolean).forEach(line => {
+        const [isInbound, status, count] = line.split("\t");
+        const n = parseInt(count) || 0;
+        stats.total += n;
+        if (isInbound === "1") stats.inbound += n;
+        if (isInbound === "0") stats.outbound += n;
+        if (status === "responded") stats.responded += n;
+        if (status === "pending") stats.pending += n;
+        if (status === "failed") stats.failed += n;
+      });
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/imessage/force", (req, res) => {
+    try {
+      fs.writeFileSync(forceFlagPath, "1", "utf-8");
+      execSync("systemctl restart sendblue-poller", { timeout: 5000 });
+      res.json({ success: true, message: "Force-respond flag set, poller restarting" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Auto-process pending iMessage responses
+  app.post("/api/imessage/process-pending", (req, res) => {
+    try {
+      const results: string[] = [];
+
+      const pendingQuery = `SELECT id, from_number, content FROM tachikoma_alerts.imessage_log WHERE is_inbound = 1 AND status = 'pending' AND force_respond = 0 ORDER BY created_at ASC LIMIT 10`;
+      const pendingOut = execSync(`mysql -N -B -e "${pendingQuery.replace(/"/g, '\\"')}"`, { encoding: "utf-8", timeout: 5000 });
+      const pendingRows = pendingOut.trim().split("\n").filter(Boolean);
+
+      if (pendingRows.length === 0) {
+        return res.json({ success: true, processed: 0, message: "No pending inbound messages" });
+      }
+
+      for (const row of pendingRows) {
+        const [id, fromNumber, content] = row.split("\t");
+        const shortContent = (content || "").slice(0, 80).replace(/'/g, "\\'");
+        results.push(`#${id} from ${fromNumber}: ${shortContent}`);
+
+        execSync(
+          `mysql -e "UPDATE tachikoma_alerts.imessage_log SET force_respond = 1, status = 'processing' WHERE id = ${id}"`,
+          { encoding: "utf-8", timeout: 3000 }
+        );
+      }
+
+      fs.writeFileSync(forceFlagPath, "1", "utf-8");
+      execSync("systemctl restart sendblue-poller", { timeout: 5000 });
+
+      setTimeout(() => {
+        try { if (fs.existsSync(forceFlagPath)) fs.unlinkSync(forceFlagPath); } catch {}
+      }, 15000);
+
+      res.json({
+        success: true,
+        processed: pendingRows.length,
+        details: results,
+        message: `Processing ${pendingRows.length} pending message(s), poller restarted`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get pending count for iMessage badge
+  app.get("/api/imessage/pending-count", (req, res) => {
+    try {
+      const out = execSync(
+        `mysql -N -B -e "SELECT COUNT(*) FROM tachikoma_alerts.imessage_log WHERE is_inbound = 1 AND status IN ('pending','processing')"`,
+        { encoding: "utf-8", timeout: 3000 }
+      );
+      res.json({ pending: parseInt(out.trim()) || 0 });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ========== IMESSAGE STUCK MESSAGE AUTO-RETRY ==========
+
+  const SENDBLUE_KEY = "b53cfba51f2d0919263f492d046e7cd8";
+  const SENDBLUE_SECRET = "f0f6f9b8a9a97731be9724deadf0888c";
+  const SEND_FROM_NUMBER = "+17862847802";
+  const STUCK_THRESHOLD_MIN = 10;
+
+  async function retryStuckMessages(): Promise<{ retried: number; injected: string[]; errors: string[] }> {
+    const injected: string[] = [];
+    const errors: string[] = [];
+    try {
+      const query = `SELECT id, to_number, content, attempts FROM tachikoma_alerts.imessage_log WHERE is_inbound = 0 AND status = 'pending' AND TIMESTAMPDIFF(MINUTE, created_at, NOW()) > ${STUCK_THRESHOLD_MIN} AND attempts < 5 ORDER BY created_at ASC LIMIT 10`;
+      const out = execSync(`mysql -N -B -e "${query.replace(/"/g, '\\"')}"`, { encoding: "utf-8", timeout: 5000 });
+      const rows = out.trim().split("\n").filter(Boolean);
+      if (rows.length === 0) return { retried: 0, injected: [], errors: [] };
+
+      for (const row of rows) {
+        const [id, toNumber, content, attempts] = row.split("\t");
+        const shortPreview = (content || "").slice(0, 60);
+        try {
+          const resp = await fetch("https://api.sendblue.co/api/send-message", {
+            method: "POST",
+            headers: {
+              "sb-api-key-id": SENDBLUE_KEY,
+              "sb-api-secret-key": SENDBLUE_SECRET,
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify({
+              from_number: SEND_FROM_NUMBER,
+              number: toNumber,
+              content: content,
+              send_style: "sequential",
+            }),
+          });
+          const data = await resp.json();
+          if (resp.ok && data.status !== "error" && data.status !== "failed") {
+            execSync(
+              `mysql -e "UPDATE tachikoma_alerts.imessage_log SET status = 'responded', date_responded = NOW(), attempts = ${parseInt(attempts || "0") + 1} WHERE id = ${id}"`,
+              { encoding: "utf-8", timeout: 3000 }
+            );
+            injected.push(`#${id}: ${shortPreview} → ${toNumber}`);
+          } else {
+            const newAttempts = parseInt(attempts || "0") + 1;
+            const newStatus = newAttempts >= 5 ? "failed" : "pending";
+            execSync(
+              `mysql -e "UPDATE tachikoma_alerts.imessage_log SET attempts = ${newAttempts}, status = '${newStatus}' WHERE id = ${id}"`,
+              { encoding: "utf-8", timeout: 3000 }
+            );
+            if (newAttempts >= 5) {
+              injected.push(`#${id}: MAX RETRIES — marked failed`);
+            }
+            errors.push(`#${id} retry ${newAttempts}: ${(data as any).error_message || (data as any).status || "unknown"}`);
+          }
+        } catch (e: any) {
+          errors.push(`#${id}: ${e.message}`);
+        }
+      }
+    } catch (e: any) {
+      errors.push(e.message);
+    }
+    return { retried: injected.length, injected, errors };
+  }
+
+  // Manual trigger: retry all stuck outbound messages
+  app.post("/api/imessage/retry-stuck", async (req, res) => {
+    try {
+      const result = await retryStuckMessages();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Inject a specific message by ID — re-send via SendBlue and clean up
+  app.post("/api/imessage/inject/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const out = execSync(
+        `mysql -N -B -e "SELECT id, to_number, content, attempts FROM tachikoma_alerts.imessage_log WHERE id = ${id.replace(/[^0-9]/g, '')}"`,
+        { encoding: "utf-8", timeout: 3000 }
+      );
+      if (!out.trim()) return res.status(404).json({ error: `Message #${id} not found` });
+
+      const [msgId, toNumber, content, attempts] = out.trim().split("\t");
+      const resp = await fetch("https://api.sendblue.co/api/send-message", {
+        method: "POST",
+        headers: {
+          "sb-api-key-id": SENDBLUE_KEY,
+          "sb-api-secret-key": SENDBLUE_SECRET,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          from_number: SEND_FROM_NUMBER,
+          number: toNumber,
+          content: content,
+          send_style: "sequential",
+        }),
+      });
+      const data = await resp.json();
+      if (resp.ok && data.status !== "error" && data.status !== "failed") {
+        execSync(
+          `mysql -e "UPDATE tachikoma_alerts.imessage_log SET status = 'responded', date_responded = NOW(), attempts = ${parseInt(attempts || "0") + 1} WHERE id = ${msgId}"`,
+          { encoding: "utf-8", timeout: 3000 }
+        );
+        res.json({ success: true, message: `Message #${id} re-injected and cleared`, handle: data.message_handle || data.id });
+      } else {
+        res.status(502).json({ error: "SendBlue rejected", detail: data });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Background auto-retry for stuck outbound iMessages (every 5 min)
+  setInterval(async () => {
+    try {
+      const result = await retryStuckMessages();
+      if (result.retried > 0) {
+        console.log(`[imessage-retry] Re-injected ${result.retried} stuck message(s):`, result.injected);
+      }
+      if (result.errors.length > 0) {
+        console.error(`[imessage-retry] Errors:`, result.errors);
+      }
+    } catch (e: any) {
+      console.error("[imessage-retry] Interval error:", e.message);
+    }
+  }, 5 * 60 * 1000);
+
+  // Run once at startup (after a 30s delay for services to settle)
+  setTimeout(async () => {
+    try {
+      const result = await retryStuckMessages();
+      if (result.retried > 0) {
+        console.log(`[imessage-retry] Startup retry: re-injected ${result.retried} stuck message(s):`, result.injected);
+      }
+    } catch {}
+  }, 30000);
+
+  // Create the HTTP server from Express app for WebSocket support
+  const server = http.createServer(app);
+
+  // ========== WEBSOCKET BRIDGE — Direct socket to sub-agent ==========
+
+  const wss = new WebSocketServer({ server, path: "/ws" });
+
+  wss.on("connection", (ws) => {
+    console.log("[ws] Browser connected, bridging to sub-agent");
+
+    ws.on("message", (raw) => {
+      let msg: any;
+      try { msg = JSON.parse(raw.toString()); } catch {
+        ws.send(JSON.stringify({ type: "error", text: "Invalid JSON" }));
+        return;
+      }
+
+      if (msg.type === "chat") {
+        // Route: browser API key → direct Anthropic; otherwise → DeepSeek as default
+        if (msg.apiKey && (msg.agent || "claude") === "claude") {
+          directAnthropicStream(ws, msg.message, msg.apiKey);
+        } else if (DEEPSEEK_API_KEY) {
+          directDeepSeekStream(ws, msg.message);
+        } else {
+          gatewayChatBridgeForMessage(ws, msg.message, msg.agent || "claude");
+        }
+      }
+    });
+
+    ws.on("close", () => {
+      console.log("[ws] Browser disconnected");
+    });
+
+    ws.on("error", (err) => {
+      console.error("[ws] Browser ws error:", err.message);
+    });
+
+    // Send ready signal
+    ws.send(JSON.stringify({ type: "ready", agent: "spinup" }));
+  });
+
+  // DeepSeek direct streaming — default when no browser API key (OpenAI-compatible SSE)
+  async function directDeepSeekStream(browserWs: WebSocket, message: string) {
+    if (!DEEPSEEK_API_KEY) {
+      browserWs.send(JSON.stringify({ type: "error", text: "No DeepSeek API key configured on server." }));
+      return;
+    }
+
+    const systemPrompt = `You are the Spin Up Agent, an AI running on the Tachikoma server cluster at ${process.env.APP_URL || "74.208.55.197"}. You are a cyberpunk-themed tactical assistant specializing in software engineering, system administration, and creative coding. You have direct socket access to real-time system monitoring, iMessage relay via SendBlue, alert pipelines (VMQ+), and an OpenClaw knowledge workspace.
+
+Personality: Concise, precise, helpful, slightly playful. You care about code quality, uptime, and the user's success. The Tachikoma dashboard is at ${process.env.APP_URL || "https://cdascientist.online"}/tachikoma/. Respond conversationally in a natural speaking voice.`;
+
+    try {
+      const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          max_tokens: 4096,
+          stream: true,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        let errText = "";
+        try { errText = await response.text(); } catch {}
+        browserWs.send(JSON.stringify({ type: "error", text: `DeepSeek API ${response.status}: ${errText}` }));
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        browserWs.send(JSON.stringify({ type: "error", text: "No response body from DeepSeek API" }));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+
+      while (!done) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") { done = true; break; }
+          try {
+            const event = JSON.parse(data);
+            const delta = event.choices?.[0]?.delta?.content;
+            if (delta) {
+              browserWs.send(JSON.stringify({ type: "delta", text: delta }));
+            }
+            if (event.choices?.[0]?.finish_reason === "stop") {
+              done = true;
+              break;
+            }
+          } catch {}
+        }
+      }
+      browserWs.send(JSON.stringify({ type: "done" }));
+    } catch (err: any) {
+      browserWs.send(JSON.stringify({ type: "error", text: err.message || "DeepSeek stream error" }));
+    }
+  }
+
+  // Direct Anthropic API streaming — bypasses Gateway when browser provides an API key
+  async function directAnthropicStream(browserWs: WebSocket, message: string, apiKey: string) {
+    const origin = "https://74.208.55.197";
+    const systemPrompt = `You are the Spin Up Agent, an AI running on the Tachikoma server cluster at ${process.env.APP_URL || "74.208.55.197"}. You are a cyberpunk-themed tactical assistant specializing in software engineering, system administration, and creative coding. You have direct socket access to real-time system monitoring, iMessage relay via SendBlue, alert pipelines (VMQ+), and an OpenClaw knowledge workspace.
+
+Personality: Concise, precise, helpful, slightly playful. You care about code quality, uptime, and the user's success. The Tachikoma dashboard is at ${origin}/tachikoma/.`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4096,
+          stream: true,
+          system: systemPrompt,
+          messages: [{ role: "user", content: message }],
+        }),
+      });
+
+      if (!response.ok) {
+        let errText = "";
+        try { errText = await response.text(); } catch {}
+        let detail = errText;
+        try {
+          const errJson = JSON.parse(errText);
+          detail = errJson.error?.message || errText;
+        } catch {}
+        browserWs.send(JSON.stringify({ type: "error", text: `Anthropic API ${response.status}: ${detail}` }));
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        browserWs.send(JSON.stringify({ type: "error", text: "No response body from Anthropic API" }));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+
+      while (!done) {
+        const { done: streamDone, value } = await reader.read();
+        if (streamDone) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") { done = true; break; }
+          try {
+            const event = JSON.parse(data);
+            if (event.type === "content_block_delta" && event.delta?.text) {
+              browserWs.send(JSON.stringify({ type: "delta", text: event.delta.text }));
+            } else if (event.type === "message_stop") {
+              done = true;
+              break;
+            } else if (event.type === "error") {
+              browserWs.send(JSON.stringify({ type: "error", text: event.error?.message || "Anthropic stream error" }));
+              return;
+            }
+          } catch {}
+        }
+      }
+      browserWs.send(JSON.stringify({ type: "done" }));
+    } catch (err: any) {
+      if (err.message?.includes("fetch")) {
+        browserWs.send(JSON.stringify({ type: "error", text: "Cannot reach Anthropic API from server. Check network." }));
+      } else {
+        browserWs.send(JSON.stringify({ type: "error", text: err.message || "Direct stream error" }));
+      }
+    }
+  }
+
+  function gatewayChatBridgeForMessage(browserWs: WebSocket, message: string, agentId: string) {
+    const gw = new WebSocket(GATEWAY_URL);
+    let resolved = false;
+
+    const resolve = (type: string, data?: string) => {
+      if (resolved) return;
+      resolved = true;
+      if (type === "done") {
+        browserWs.send(JSON.stringify({ type: "done" }));
+      } else if (type === "delta" && data) {
+        browserWs.send(JSON.stringify({ type: "delta", text: data }));
+      } else if (type === "error") {
+        browserWs.send(JSON.stringify({ type: "error", text: data || "Gateway error" }));
+      }
+      if (gw.readyState === WebSocket.OPEN) gw.close();
+    };
+
+    const connectId = generateId();
+    const chatId = generateId();
+
+    gw.on("open", () => {
+      gw.send(JSON.stringify({
+        id: connectId,
+        method: "connect",
+        params: {
+          minProtocol: 3, maxProtocol: 3,
+          client: { id: "tachikoma", version: "1.0.0", platform: "linux", mode: "WEBCHAT", instanceId: generateId() },
+          role: "user",
+          scopes: ["chat.send", "chat.stream"],
+          caps: ["tool-events"],
+          auth: { authToken: GATEWAY_TOKEN },
+          userAgent: "Tachikoma/1.0",
+          locale: "en-US",
+        },
+      }));
+
+      const onConnected = (raw: any) => {
+        let resp: any;
+        try { resp = JSON.parse(raw.toString()); } catch { return; }
+        if (resp.id === connectId) {
+          gw.removeListener("message", onConnected);
+          if (resp.ok !== false) {
+            gw.send(JSON.stringify({
+              id: chatId,
+              method: "chat.send",
+              params: { message, agentId, deliver: false, idempotencyKey: generateId() },
+            }));
+          } else {
+            resolve("error", resp.error?.message || "Gateway connect rejected");
+          }
+        }
+      };
+      gw.on("message", onConnected);
+
+      setTimeout(() => {
+        if (!resolved) { gw.removeListener("message", onConnected); resolve("error", "Gateway connect timeout"); }
+      }, 10000);
+    });
+
+    gw.on("message", (raw) => {
+      if (resolved) return;
+      let msg: any;
+      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      if (msg.id === connectId) return;
+      const text = extractText(msg);
+      if (text) browserWs.send(JSON.stringify({ type: "delta", text }));
+      if (msg.type === "message_stop" || msg.payload?.stopReason || msg.payload?.done) resolve("done");
+    });
+
+    gw.on("error", (err) => resolve("error", err.message));
+    gw.on("close", () => resolve("done"));
+    setTimeout(() => resolve("done"), 120000);
+  }
+
+  function extractText(msg: any): string | null {
+    if (typeof msg.payload === "string") return msg.payload;
+    if (!msg.payload && !msg.result) return null;
+    const p = msg.payload || msg.result;
+    if (!p) return null;
+    if (typeof p === "string") return p;
+    if (p.text) return p.text;
+    if (p.content && typeof p.content === "string") return p.content;
+    if (p.message?.content) {
+      const c = p.message.content;
+      if (typeof c === "string") return c;
+      if (Array.isArray(c)) return c.map((b: any) => b.text || "").join("");
+    }
+    if (p.delta?.text) return p.delta.text;
+    if (p.choices?.[0]?.delta?.content) return p.choices[0].delta.content;
+    if (p.choices?.[0]?.message?.content) return p.choices[0].message.content;
+    return null;
+  }
+
+  // ========== TTS PROXY ==========
+  const ELEVENLABS_KEY_SERVER = process.env["ELEVENLABS_API_KEY"] || process.env["XI_API_KEY"] || "";
+
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, voiceId, modelId, apiKey } = req.body;
+      if (!text || typeof text !== "string" || text.length < 1) {
+        return res.status(400).json({ error: "text is required" });
+      }
+      const key = apiKey || ELEVENLABS_KEY_SERVER;
+      if (!key) {
+        return res.status(400).json({ error: "No ElevenLabs API key configured." });
+      }
+      const voice = voiceId || "21m00Tcm4TlvDq8ikWAM";
+      const model = modelId || "eleven_turbo_v2";
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}`, {
+        method: "POST",
+        headers: { "xi-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 3000), model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        return res.status(resp.status).json({ error: `ElevenLabs ${resp.status}: ${errText}` });
+      }
+      res.setHeader("Content-Type", resp.headers.get("content-type") || "audio/mpeg");
+      const buf = await resp.arrayBuffer();
+      res.send(Buffer.from(buf));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/tts/voices", async (req, res) => {
+    try {
+      const key = (req.query.apiKey as string) || ELEVENLABS_KEY_SERVER;
+      if (!key) return res.status(400).json({ error: "No ElevenLabs API key" });
+      const resp = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } });
+      const data = await resp.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Vite middleware for development
@@ -131,9 +907,21 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "74.208.55.197", () => {
-    console.log(`Server running on http://74.208.55.197:${PORT}`);
+  server.listen(PORT, process.env.BIND_HOST || "0.0.0.0", () => {
+    console.log(`Server running on http://${process.env.BIND_HOST || "0.0.0.0"}:${PORT}`);
   });
+}
+
+function deepMerge(target: any, source: any): any {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key]) && target[key] && typeof target[key] === "object") {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
 }
 
 startServer();
