@@ -1,3 +1,4 @@
+import { apiPath } from "../lib/basePath";
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { FolderNode, Tree, TreeNode } from 'react-file-navigator';
 
@@ -30,7 +31,7 @@ export const FileExplorerProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchFiles = useCallback(async () => {
         try {
-            const response = await fetch('/tachikoma/api/files');
+            const response = await fetch(apiPath('files'));
             if (response.ok) {
                 const files = await response.json();
                 

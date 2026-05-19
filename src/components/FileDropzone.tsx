@@ -1,3 +1,4 @@
+import { apiPath } from "../lib/basePath";
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, File as FileIcon, Trash2, Loader2 } from 'lucide-react';
@@ -24,7 +25,7 @@ export const FileDropzone: React.FC = () => {
         });
 
         try {
-            const response = await fetch('/tachikoma/api/files/upload', {
+            const response = await fetch(apiPath('files/upload'), {
                 method: 'POST',
                 body: formData,
             });
@@ -48,7 +49,7 @@ export const FileDropzone: React.FC = () => {
         
         // Use ID (filename) to delete
         try {
-            const response = await fetch(`/tachikoma/api/files/${encodeURIComponent(id)}`, {
+            const response = await fetch(apiPath(`files/${encodeURIComponent(id)}`), {
                 method: 'DELETE',
             });
             if (response.ok) {

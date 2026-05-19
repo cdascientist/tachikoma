@@ -1,3 +1,4 @@
+import { wsUrl, BASE } from "../lib/basePath";
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 const CONFIG = {
@@ -13,7 +14,7 @@ const CONFIG = {
 
 Personality: Concise, precise, helpful, slightly playful. You care about code quality, uptime, and the user's success.
 
-You run on Ubuntu with 2GB RAM, systemd services, the OpenClaw Gateway on port 8000, and the Tachikoma dashboard at ${origin}/tachikoma/. Answer in a natural conversational voice.`;
+You run on Ubuntu with 2GB RAM, systemd services, the OpenClaw Gateway on port 8000, and the Tachikoma dashboard at ${origin}${BASE}. Answer in a natural conversational voice.`;
     },
 };
 
@@ -62,7 +63,7 @@ export const ChatBotInterface: React.FC = React.memo(() => {
     // Compute WebSocket URL from current origin
     const getWsUrl = () => {
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        return `${proto}//${window.location.host}/tachikoma/ws`;
+        return wsUrl();
     };
 
     useEffect(() => { inputTextRef.current = inputText; }, [inputText]);

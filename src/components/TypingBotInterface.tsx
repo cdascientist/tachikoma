@@ -1,3 +1,4 @@
+import { wsUrl, BASE } from "../lib/basePath";
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 const CONFIG = {
@@ -5,7 +6,7 @@ const CONFIG = {
         const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
         return `You are the Spin Up Agent, an AI running on the Tachikoma server cluster at 74.208.55.197. You are a cyberpunk-themed tactical assistant specializing in software engineering, system administration, and creative coding. You have direct socket access to real-time system monitoring, iMessage relay via SendBlue, alert pipelines (VMQ+), and an OpenClaw knowledge workspace.
 
-Personality: Concise, precise, helpful, slightly playful. You care about code quality, uptime, and the user's success. The Tachikoma dashboard is at ${origin}/tachikoma/.`;
+Personality: Concise, precise, helpful, slightly playful. You care about code quality, uptime, and the user's success. The Tachikoma dashboard is at ${origin}${BASE}.`;
     },
 };
 
@@ -30,7 +31,7 @@ export const TypingBotInterface: React.FC = React.memo(() => {
 
     const getWsUrl = () => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        return `${protocol}//${window.location.host}/tachikoma/ws`;
+        return wsUrl();
     };
 
     useEffect(() => {
