@@ -24,7 +24,7 @@ export const FileDropzone: React.FC = () => {
         });
 
         try {
-            const response = await fetch('/api/files/upload', {
+            const response = await fetch('/tachikoma/api/files/upload', {
                 method: 'POST',
                 body: formData,
             });
@@ -48,7 +48,7 @@ export const FileDropzone: React.FC = () => {
         
         // Use ID (filename) to delete
         try {
-            const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+            const response = await fetch(`/tachikoma/api/files/${encodeURIComponent(id)}`, {
                 method: 'DELETE',
             });
             if (response.ok) {

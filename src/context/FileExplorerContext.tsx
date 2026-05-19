@@ -30,7 +30,7 @@ export const FileExplorerProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchFiles = useCallback(async () => {
         try {
-            const response = await fetch('/api/files');
+            const response = await fetch('/tachikoma/api/files');
             if (response.ok) {
                 const files = await response.json();
                 
